@@ -1,120 +1,56 @@
-"""Fiação (runtime) da aplicação: repositórios, serviços e sincronização.
+"""Fiação (runtime) da aplicação.
 
-Em `APP_ENV=test` ou sem credenciais, usa repositórios em memória, o que
-permite rodar o app e a interface sem conexão com o Google Sheets. Quando
-há credenciais (`GOOGLE_SERVICE_ACCOUNT_JSON` + `GOOGLE_SHEETS_ID`),
-conecta ao Sheets e inicia um ciclo de sincronização bidirecional.
+Modelo de execução compatível com deploy serverless (ex.: Vercel):
+a planilha do Google Sheets é a ÚNICA fonte de verdade. Cada requisição
+lê/escreve diretamente na planilha — não há estado local nem thread de
+sincronização em segundo plano.
+
+Em testes (ou sem credenciais), usa repositórios em memória.
 """
 from __future__ import annotations
 
-import threading
-import time
 from typing import Any
 
-from . import models
-from .config import config
-from .repo import Repositorio, RepositorioMemoria, criar_repositorios
+from .repo import Repositorio, criar_repositorios
 from .services import ServicoPartidas, ServicoParticipantes, ServicoTimes
-from .sync import Sincronizador
 
 
 class Runtime:
-    """Agrupa repositórios, serviços e o estado de sincronização."""
+    """Agrupa repositórios e serviços da aplicação."""
 
     def __init__(self) -> None:
-        self.repositorios: dict[str, Repositorio] = criar_repositorios(em_memoria=True)
-        self.remoto: dict[str, Any] | None = None
-        self._sync_thread: threading.Thread | None = None
-        self._parar = threading.Event()
-        self.ultimo_log: list[str] = []
+        self.repositorios: dict[str, Repositorio] = {}
+        self.servico_participantes: ServicoParticipantes | None = None
+        self.servico_times: ServicoTimes | None = None
+        self.servico_partidas: ServicoPartidas | None = None
+        self.modo = "memoria"
+        self.reiniciar()
 
-        self.servico_participantes = ServicoParticipantes(self.repositorios["Participantes"])
+    def _ligar(self, repos: dict[str, Repositorio]) -> None:
+        """Religa os serviços aos repositórios fornecidos."""
+        self.repositorios = repos
+        self.servico_participantes = ServicoParticipantes(repos["Participantes"])
         self.servico_times = ServicoTimes(
-            self.repositorios["Times"], self.repositorios["Participantes"]
+            repos["Times"], repos["Participantes"]
         )
-        self.servico_partidas = ServicoPartidas(self.repositorios["Partidas"])
+        self.servico_partidas = ServicoPartidas(repos["Partidas"])
 
     def reiniciar(self) -> None:
-        """Recria repositórios em memória e religa os serviços (usado em testes)."""
-        self.repositorios = criar_repositorios(em_memoria=True)
-        self.ultimo_log = []
-        self.servico_participantes = ServicoParticipantes(self.repositorios["Participantes"])
-        self.servico_times = ServicoTimes(
-            self.repositorios["Times"], self.repositorios["Participantes"]
-        )
-        self.servico_partidas = ServicoPartidas(self.repositorios["Partidas"])
-
-    # -- Sincronização -----------------------------------------------
-    def _construir_sincronizadores(self) -> list[Sincronizador]:
-        if not self.remoto:
-            return []
-        modelos = models.ABAS
-        sincronizadores = []
-        for nome, remoto_repo in self.remoto.items():
-            modelo = modelos[nome]
-            local_repo = self.repositorios[nome]
-
-            def ler_local(r=local_repo):
-                return r.obter_todos()
-
-            def salvar_local(reg, r=local_repo):
-                return r.salvar(reg)
-
-            def ler_remoto(r=remoto_repo):
-                return r.ler_todas()
-
-            def escrever_remoto(id_, linha, r=remoto_repo):
-                return r.escrever(id_, linha)
-
-            sincronizadores.append(
-                Sincronizador(
-                    ler_local, salvar_local, ler_remoto, escrever_remoto,
-                    para_linha=lambda reg: reg.to_linha(),
-                    de_linha=lambda linha, m=modelo: m.de_linha(linha),
-                )
-            )
-        return sincronizadores
+        """Volta para repositórios em memória (usado em testes)."""
+        self._ligar(criar_repositorios(em_memoria=True))
+        self.modo = "memoria"
 
     def ativar_sheets(self) -> bool:
-        """Conecta ao Google Sheets e prepara a sincronização. Retorna se ok."""
+        """Passa a usar o Google Sheets como fonte de dados. Retorna se ok."""
         try:
             from .sheets_repo import abrir_planilha, criar_repositorios_producao
             planilha = abrir_planilha()
-            self.remoto = criar_repositorios_producao(planilha)
+            self._ligar(criar_repositorios_producao(planilha))
+            self.modo = "sheets"
             return True
-        except Exception as exc:  # credenciais ausentes ou inválidas
-            self.ultimo_log.append(f"sheets-offline: {exc}")
-            self.remoto = None
+        except Exception:
+            self.reiniciar()
             return False
-
-    def iniciar_sync_loop(self) -> None:
-        """Inicia o polling periódico de sincronização em segundo plano."""
-        if not self.remoto:
-            return
-        if self._sync_thread and self._sync_thread.is_alive():
-            return
-
-        def loop():
-            while not self._parar.is_set():
-                self.sincronizar()
-                self._parar.wait(config.SYNC_INTERVAL_SECONDS)
-
-        self._sync_thread = threading.Thread(target=loop, daemon=True)
-        self._sync_thread.start()
-
-    def sincronizar(self) -> list[str]:
-        """Executa um ciclo de sincronização; retorna o log de ações."""
-        acoes: list[str] = []
-        for sinc in self._construir_sincronizadores():
-            try:
-                acoes.extend(sinc.sincronizar())
-            except Exception as exc:  # não derruba o ciclo por uma aba
-                acoes.append(f"erro: {exc}")
-        self.ultimo_log = acoes
-        return acoes
-
-    def encerrar(self) -> None:
-        self._parar.set()
 
 
 # Instância única usada pelo app FastAPI.

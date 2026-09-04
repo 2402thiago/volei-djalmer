@@ -1,8 +1,7 @@
 """Aplicação FastAPI: API JSON + servir o frontend estático.
 
-Os endpoints expõem a lógica de negócio para a interface web. A resposta
-de sincronização é exposta para que o frontend saiba quando houve edição
-manual na planilha.
+Modelo serverless: a planilha do Google Sheets é a fonte única de dados.
+Cada requisição lê/escreve diretamente na planilha (sem estado local).
 """
 from __future__ import annotations
 
@@ -21,9 +20,8 @@ STATIC_DIR = BASE / "static"
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    """Conecta ao Google Sheets (se configurado) e inicia o sync em 2º plano."""
-    if runtime.ativar_sheets():
-        runtime.iniciar_sync_loop()
+    """Conecta ao Google Sheets (se credenciais estiverem configuradas)."""
+    runtime.ativar_sheets()
     yield
 
 
@@ -135,14 +133,9 @@ def obter_classificacao():
 
 
 # -- Sincronização / saúde -------------------------------------------
-@app.get("/api/sync/log")
-def sync_log():
-    return {"acoes": runtime.ultimo_log}
-
-
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "env": "sheets" if runtime.remoto else "memoria"}
+    return {"status": "ok", "env": runtime.modo}
 
 
 app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")

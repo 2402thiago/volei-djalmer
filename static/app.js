@@ -233,15 +233,17 @@ async function carregarHistorico() {
 }
 
 // ---- Sincronização ---------------------------------------------------
-async function atualizarIndicadorSync() {
+// A planilha é a fonte única de dados. O navegador recarrega as listas
+// periodicamente para refletir edições feitas manualmente na planilha.
+const INTERVALO_REFRESH_MS = 30000;
+
+async function atualizarDados() {
   try {
-    const log = await api.get("/api/sync/log");
-    const acoes = log.acoes || [];
-    const escreveu = acoes.some((a) => a.startsWith("conflito-remoto") || a.startsWith("pull"));
-    $("indicador-sync").textContent = escreveu ? "Sincronizado ↑" : "Sincronizado";
-    if (escreveu) await Promise.all([
+    await Promise.all([
       carregarParticipantes(), carregarTimes(), carregarHistorico(),
     ]);
+    atualizarPlacarUI();
+    $("indicador-sync").textContent = "Sincronizado";
   } catch {
     $("indicador-sync").textContent = "Offline";
   }
@@ -249,9 +251,6 @@ async function atualizarIndicadorSync() {
 
 // ---- Inicialização ---------------------------------------------------
 (async function init() {
-  await Promise.all([
-    carregarParticipantes(), carregarTimes(), carregarHistorico(),
-  ]);
-  atualizarPlacarUI();
-  setInterval(atualizarIndicadorSync, 10000);
+  await atualizarDados();
+  setInterval(atualizarDados, INTERVALO_REFRESH_MS);
 })();

@@ -93,15 +93,15 @@ Para executar a API em rede local e abrir em um celular:
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-## Sincronização bidirecional
+## Sincronização com o Google Sheets
 
-- Um ciclo de sincronização roda em segundo plano a cada `SYNC_INTERVAL_SECONDS` segundos.
-- **Regra de conflito ("última escrita vence"):** compara o campo `atualizado_em`
-  (timestamp) de cada registro. O valor mais recente — do app ou de uma edição
-  manual na planilha — é aplicado nos dois lados.
-- Edições manuais feitas direto na planilha são **importadas** automaticamente.
-- **Observação:** as alterações feitas no app são enviadas para a planilha no
-  próximo ciclo de polling (padrão de 20s), não instantaneamente.
+A planilha é a **fonte única de verdade**:
+
+- Mudanças feitas no app vão **direto** para a planilha (escritas imediatas).
+- Mudanças feitas manualmente na planilha aparecem no app na próxima atualização
+  da tela (o frontend recarrega as listas a cada 30s).
+- Como existe uma única cópia dos dados, não há conflito de merge entre cópias
+  locais e remotas.
 
 ## Estrutura de abas da planilha
 
@@ -127,36 +127,45 @@ app/
   models.py        # modelos de domínio e colunas das abas
   repo.py          # contrato de repositório + implementação em memória
   sheets_repo.py   # integração com Google Sheets (gspread)
-  sync.py          # sincronização bidirecional ("última escrita vence")
+  sync.py          # sincronização (merge "última escrita vence")
   services.py      # regras de negócio (participantes, times, partidas)
-  runtime.py       # fiação de repositórios/serviços/sincronização
+  runtime.py       # fiação de repositórios/serviços
   main.py          # API FastAPI + serve do frontend
+api/index.py       # ponto de entrada do deploy no Vercel
 static/            # frontend (HTML/CSS/JS)
 tests/             # testes unitários e de API
-Dockerfile         # imagem do deploy
-render.yaml        # blueprint de deploy do Render
+vercel.json        # configuração de deploy do Vercel
 PROGRESSO.md       # histórico das fases e decisões
 ```
 
-## Deploy (Render)
+## Deploy (Vercel)
 
-O app é um servidor Python sempre ativo (mantém estado em memória e uma thread
-de sincronização). Por isso, usa-se um host **não-serverless**, como o Render.
+O app foi adaptado para o modelo **serverless**: a planilha do Google Sheets é a
+**única fonte de verdade** e cada requisição lê/escreve diretamente nela (sem
+estado local nem thread em segundo plano). O frontend recarrega as listas a cada
+30s para refletir edições manuais feitas na planilha.
 
 1. **Crie o repositório no GitHub** (privado recomendado) e envie este projeto.
-2. No Render, em **New > Blueprint Instance**, conecte o repositório — o Render
-   detecta o `render.yaml` automaticamente.
-3. Defina as variáveis de ambiente no painel (Render > Web Service > Environment):
+2. Instale o CLI do Vercel e faça login:
+   ```bash
+   npm i -g vercel
+   vercel login
+   ```
+3. Defina as variáveis de ambiente no projeto (via `vercel env add` ou no painel):
    - `GOOGLE_SHEETS_ID` — ID da planilha.
    - `GOOGLE_SERVICE_ACCOUNT_INFO` — o JSON completo da conta de serviço (string).
-   - `SYNC_INTERVAL_SECONDS` — opcional, padrão 20.
-4. O Render constrói via `Dockerfile` e faz deploy. Use a URL gerada (ex.:
-   `https://volei-djalmer.onrender.com`) e confira `/api/health` → `"env":"sheets"`.
-5. Lembre-se de compartilhar a planilha com o e-mail da conta de serviço.
+   - `SYNC_INTERVAL_SECONDS` — opcional (não é mais usado em runtime).
+4. Faça o deploy:
+   ```bash
+   vercel            # preview
+   vercel --prod     # produção
+   ```
+5. Acesse a URL gerada e confira `/api/health` → `"env":"sheets"`.
+6. Lembre-se de compartilhar a planilha com o e-mail da conta de serviço.
 
-> **Importante:** o Dockerfile executa **um único worker/processo**. Não altere
-> para múltiplos workers, pois o estado em memória e a thread de sincronização
-> exigem processo único.
+> **Sobre o modelo de dados:** como a planilha é a fonte única, mudanças feitas
+> manualmente nela aparecem no app na próxima atualização da tela (polling de 30s),
+> e mudanças feitas no app vão direto para a planilha.
 
 ## Segurança (lembrete importante)
 

@@ -1,0 +1,30 @@
+# Segredos e configuração local — nunca vão para o deploy
+.env
+*.env
+!*.env.example
+credenciais/
+*.service-account*.json
+
+# Ambiente Python local
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Testes (não necessários em runtime)
+.pytest_cache/
+.coverage
+htmlcov/
+tests/
+
+# Arquivos de deploy do Render (não usados no Vercel)
+Dockerfile
+render.yaml
+
+# Outros
+.git/
+.vercel/
+README.md
+PROGRESSO.md

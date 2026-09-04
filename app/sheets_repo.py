@@ -7,7 +7,7 @@ como dicts, aproveitando o contrato da camada de sincronização.
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
 import gspread
 from google.oauth2 import service_account
@@ -15,6 +15,9 @@ from google.oauth2.credentials import Credentials
 
 from . import models
 from .config import config
+from .repo import Repositorio
+
+T = TypeVar("T")
 
 if TYPE_CHECKING:
     from googleapiclient.discovery import Resource  # pragma: no cover
@@ -129,14 +132,53 @@ class SheetsRepositorio:
         return letra or "A"
 
 
-def criar_repositorios_producao(planilha: gspread.Spreadsheet) -> dict[str, SheetsRepositorio]:
-    """Cria os repositórios de produção para cada aba conhecida."""
-    abas_colunas = {
-        "Participantes": models.PARTICIPANTES_COLUNAS,
-        "Times": models.TIMES_COLUNAS,
-        "Partidas": models.PARTIDAS_COLUNAS,
+def criar_repositorios_producao(planilha: gspread.Spreadsheet) -> dict[str, Repositorio]:
+    """Cria os repositórios de produção para cada aba conhecida.
+
+    Retorna repositórios que implementam o contrato `Repositorio` e que
+    leem/escrevem DIRETAMENTE na planilha (a planilha é a única fonte de
+    verdade — adequado para deploy serverless, sem estado local).
+    """
+    abas = {
+        "Participantes": (models.PARTICIPANTES_COLUNAS, models.Participante),
+        "Times": (models.TIMES_COLUNAS, models.Time),
+        "Partidas": (models.PARTIDAS_COLUNAS, models.Partida),
     }
     return {
-        nome: SheetsRepositorio(planilha, nome, colunas)
-        for nome, colunas in abas_colunas.items()
+        nome: SheetBackedRepo(SheetsRepositorio(planilha, nome, colunas), modelo)
+        for nome, (colunas, modelo) in abas.items()
     }
+
+
+class SheetBackedRepo(Repositorio[T]):
+    """Adapta `SheetsRepositorio` (baixo nível, linhas) ao contrato `Repositorio`.
+
+    Cada operação lê ou escreve na planilha em tempo real, sem cache local.
+    Isso mantém o comportamento "bidirecional": edições manuais na planilha
+    aparecem na próxima leitura, e escritas do app vão direto para a planilha.
+    """
+
+    def __init__(self, sheets: SheetsRepositorio, modelo: type) -> None:
+        self._sheets = sheets
+        self._modelo = modelo
+
+    def obter_todos(self) -> list[T]:
+        return [
+            self._modelo.de_linha(linha)
+            for linha in self._sheets.ler_todas()
+            if linha.get("id")
+        ]
+
+    def obter(self, id_: str) -> T | None:
+        for linha in self._sheets.ler_todas():
+            if linha.get("id") == id_:
+                return self._modelo.de_linha(linha)
+        return None
+
+    def salvar(self, registro: T) -> T:
+        self._sheets.escrever(registro.id, registro.to_linha())
+        return registro
+
+    def remover(self, id_: str) -> bool:
+        self._sheets.remover(id_)
+        return True

@@ -9,41 +9,37 @@
 
 - **Fases concluídas:** Fase 0, 1, 2, 3, 4, 5 — **projeto concluído.**
 - **Integração real com Google Sheets configurada e validada.**
-- **Deploy (em andamento, BLOQUEADO por rede):** repo local pronto; push ao GitHub bloqueado por falta de conectividade com `github.com`.
+- **Deploy (em andamento):** refatorado para **Vercel** (modelo serverless, fonte única = Sheets). Preparando commit + push + deploy.
 
 ---
 
-## Deploy — GitHub + Render (EM ANDAMENTO)
+## Deploy — GitHub + Vercel (EM ANDAMENTO)
 
-### Já feito
-- Refatoração das credenciais para **env var**:
-  - `app/config.py` adiciona `GOOGLE_SERVICE_ACCOUNT_INFO` (JSON string, produção).
-  - `app/sheets_repo.py` usa `from_service_account_info` quando `GOOGLE_SERVICE_ACCOUNT_INFO` está presente; senão usa arquivo (`GOOGLE_SERVICE_ACCOUNT_JSON`).
-  - Validado: conexão por env var ao Google Sheets OK; **31/31 testes passando**.
-- Arquivos de deploy:
-  - `Dockerfile` (python:3.12-slim; **1 worker**, usa `$PORT`).
-  - `render.yaml` (blueprint: docker, plano free, healthcheck `/api/health`, autoDeploy).
-  - `.dockerignore` (exclui `.env`, `credenciais/`, `.venv`, testes etc.).
-  - `README.md` atualizado com a seção "Deploy (Render)".
-- Git:
-  - Repositório inicializado, branch `main`, commit `0d10511`.
-  - **Verificado:** nenhum segredo (`.env`, `credenciais/sheets.json`) versionado.
-  - Remote `origin` configurado: `https://github.com/2402thiago/volei-djalmer.git`.
+### Mudança de arquitetura (Fonte única = Google Sheets)
+- O Vercel é serverless (sem estado em memória nem thread em 2º plano). Refatorado para:
+  - A planilha é a **única fonte de verdade**; cada requisição lê/escreve direto nela.
+  - `app/sheets_repo.py`: novo `SheetBackedRepo` (implementa `Repositorio`) lendo/escrevendo em tempo real.
+  - `app/runtime.py`: simplificado, sem thread/sync loop; `ativar_sheets()` troca memória→Sheets; `reiniciar()` para testes.
+  - `app/main.py`: lifespan só conecta ao Sheets; removido `/api/sync/log`; health usa `runtime.modo`.
+  - `static/app.js`: polling de recarga a cada 30s (em vez de `/api/sync/log`).
+  - `app/services.py`, `repo.py`, `sync.py`: mantidos (testes continuam válidos).
+- Validado: **31/31 testes**; write stateless → planilha; releitura da planilha; limpeza OK.
 
-### BLOQUEIO (rede)
-- `github.com:443` inalcançável desta rede (`google.com` funciona). Não foi possível
-  criar o repo no GitHub nem fazer push.
-- **Solução:** usar VPN/proxy que alcance o GitHub e executar:
-  ```bash
-  gh repo create volei-djalmer --private --source . --remote origin --push
-  # se o repo já existir:
-  git push -u origin main
-  ```
+### Arquivos de deploy (Vercel)
+- `vercel.json` (rota `/(.*)` → função Python), `api/index.py` (expõe o app ASGI), `.vercelignore`.
+- Removidos `Dockerfile` e `render.yaml` (não usados no Vercel).
+- `README.md` atualizado (seção Vercel + modelo de dados).
 
-### Próximo passo (após destravar GitHub)
-1. `git push -u origin main` (repo já configurado).
-2. No Render: **New > Blueprint Instance** → conectar o repo (`render.yaml` é detectado).
-3. Definir env vars no painel: `GOOGLE_SHEETS_ID`, `GOOGLE_SERVICE_ACCOUNT_INFO`, `SYNC_INTERVAL_SECONDS`.
+### Já feito antes (base)
+- Credenciais por env var (`GOOGLE_SERVICE_ACCOUNT_INFO`), repo local com branch `main`, remote `origin` configurado.
+
+### BLOQUEIO ANTERIOR (resolvido)
+- `github.com:443` ficou inalcançável num momento (transitório); voltou a funcionar. Nenhum bloqueio real.
+
+### Próximo passo
+1. `git add -A` + commit.
+2. `gh repo create volei-djalmer --private --source . --remote origin --push`.
+3. `vercel` (link) + `vercel env add` (GOOGLE_SHEETS_ID, GOOGLE_SERVICE_ACCOUNT_INFO) + `vercel --prod`.
 4. Validar `/api/health` → `"env":"sheets"`.
 
 ---
