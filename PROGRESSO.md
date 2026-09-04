@@ -9,7 +9,7 @@
 
 - **Fases concluídas:** Fase 0, 1, 2, 3, 4, 5 — **projeto concluído.**
 - **Integração real com Google Sheets configurada e validada.**
-- **Deploy (em andamento):** refatorado para **Vercel** (modelo serverless, fonte única = Sheets). Preparando commit + push + deploy.
+- **Deploy concluído no Vercel: `https://volei-djalmer.vercel.app`** (conecta ao Sheets, `"env":"sheets"`).
 
 ---
 
@@ -37,10 +37,20 @@
 - `github.com:443` ficou inalcançável num momento (transitório); voltou a funcionar. Nenhum bloqueio real.
 
 ### Próximo passo
-1. `git add -A` + commit.
-2. `gh repo create volei-djalmer --private --source . --remote origin --push`.
-3. `vercel` (link) + `vercel env add` (GOOGLE_SHEETS_ID, GOOGLE_SERVICE_ACCOUNT_INFO) + `vercel --prod`.
-4. Validar `/api/health` → `"env":"sheets"`.
+1. ~~`git add -A` + commit~~ **FEITO**
+2. ~~`gh repo create volei-djalmer --private --source . --remote origin --push`~~ **FEITO** (repo PRIVATE em github.com/2402thiago/volei-djalmer)
+3. ~~`vercel` + env vars + `vercel --prod`~~ **FEITO**
+4. ~~Validar `/api/health` → `"env":"sheets"`~~ **FEITO** — `https://volei-djalmer.vercel.app`
+
+### Resultado final do deploy
+- Repositório GitHub: `github.com/2402thiago/volei-djalmer` (PRIVATE), branch `main`, 3 commits.
+- Projeto Vercel: `thiago-r-projects00/volei-djalmer`, alias `https://volei-djalmer.vercel.app`.
+- Env vars de produção: `GOOGLE_SHEETS_ID` e `GOOGLE_SERVICE_ACCOUNT_INFO` (secret).
+- Validação ponta a ponta em produção: criar participantes → montar times (média 3.0 vs 3.0) → ler da planilha → limpeza OK.
+
+### Lembrete de segurança
+- Service account com escopo só de planilhas. Como o JSON foi colado no chat, recomenda-se
+  **revogar/rotacionar a chave** no Google Cloud Console após o uso.
 
 ---
 
