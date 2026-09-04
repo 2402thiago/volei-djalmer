@@ -9,7 +9,42 @@
 
 - **Fases concluídas:** Fase 0, 1, 2, 3, 4, 5 — **projeto concluído.**
 - **Integração real com Google Sheets configurada e validada.**
-- **Próximo passo:** nenhum pendente.
+- **Deploy (em andamento, BLOQUEADO por rede):** repo local pronto; push ao GitHub bloqueado por falta de conectividade com `github.com`.
+
+---
+
+## Deploy — GitHub + Render (EM ANDAMENTO)
+
+### Já feito
+- Refatoração das credenciais para **env var**:
+  - `app/config.py` adiciona `GOOGLE_SERVICE_ACCOUNT_INFO` (JSON string, produção).
+  - `app/sheets_repo.py` usa `from_service_account_info` quando `GOOGLE_SERVICE_ACCOUNT_INFO` está presente; senão usa arquivo (`GOOGLE_SERVICE_ACCOUNT_JSON`).
+  - Validado: conexão por env var ao Google Sheets OK; **31/31 testes passando**.
+- Arquivos de deploy:
+  - `Dockerfile` (python:3.12-slim; **1 worker**, usa `$PORT`).
+  - `render.yaml` (blueprint: docker, plano free, healthcheck `/api/health`, autoDeploy).
+  - `.dockerignore` (exclui `.env`, `credenciais/`, `.venv`, testes etc.).
+  - `README.md` atualizado com a seção "Deploy (Render)".
+- Git:
+  - Repositório inicializado, branch `main`, commit `0d10511`.
+  - **Verificado:** nenhum segredo (`.env`, `credenciais/sheets.json`) versionado.
+  - Remote `origin` configurado: `https://github.com/2402thiago/volei-djalmer.git`.
+
+### BLOQUEIO (rede)
+- `github.com:443` inalcançável desta rede (`google.com` funciona). Não foi possível
+  criar o repo no GitHub nem fazer push.
+- **Solução:** usar VPN/proxy que alcance o GitHub e executar:
+  ```bash
+  gh repo create volei-djalmer --private --source . --remote origin --push
+  # se o repo já existir:
+  git push -u origin main
+  ```
+
+### Próximo passo (após destravar GitHub)
+1. `git push -u origin main` (repo já configurado).
+2. No Render: **New > Blueprint Instance** → conectar o repo (`render.yaml` é detectado).
+3. Definir env vars no painel: `GOOGLE_SHEETS_ID`, `GOOGLE_SERVICE_ACCOUNT_INFO`, `SYNC_INTERVAL_SECONDS`.
+4. Validar `/api/health` → `"env":"sheets"`.
 
 ---
 
