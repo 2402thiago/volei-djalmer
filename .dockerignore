@@ -1,0 +1,28 @@
+# Segredos e configuração local — NUNCA entram na imagem
+.env
+*.env
+!*.env.example
+credenciais/
+*.service-account*.json
+
+# Python
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Testes
+.pytest_cache/
+.coverage
+htmlcov/
+tests/
+
+# Outros
+.git/
+.gitignore
+README.md
+PROGRESSO.md
+render.yaml
+.vercel/

@@ -1,0 +1,30 @@
+# Arquivos sensíveis / temporários
+.env
+*.env
+!*.env.example
+
+# Credenciais da conta de serviço do Google Cloud
+credenciais/
+*.service-account*.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Testes e cobertura
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Editores / SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Cache local do sistema (estado de sincronização)
+*.cache.json
