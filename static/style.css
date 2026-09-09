@@ -157,3 +157,28 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .titulo-secao { margin: 18px 0 8px; font-size: 15px; color: var(--texto-suave); }
 .posicao { font-weight: 700; color: var(--acento); min-width: 24px; }
+
+/* Botão secundário */
+button.secundario {
+  background: #fff;
+  color: var(--acento);
+  border-color: var(--acento);
+  font-weight: 600;
+}
+
+/* Preview de importação */
+.preview-lista {
+  margin-top: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  background: var(--card);
+  border-radius: var(--raio);
+  padding: 8px;
+  border: 1px solid var(--borda);
+}
+.preview-item {
+  padding: 6px 10px;
+  font-size: 0.85rem;
+  border-bottom: 1px solid var(--borda);
+}
+.preview-item:last-child { border-bottom: none; }

@@ -74,6 +74,19 @@ def remover_participante(id_: str):
     return _resposta(lambda: {"ok": runtime.servico_participantes.remover(id_)})
 
 
+@app.post("/api/participantes/importar")
+def importar_participantes(payload: dict):
+    """Limpa lista atual e importa até 24 titulares sem nível."""
+    nomes = payload.get("nomes", [])[:24]
+    if not nomes:
+        raise ErroDeDominio("Lista de nomes vazia.")
+    
+    runtime.servico_participantes.limpar_todos()
+    criados = runtime.servico_participantes.criar_em_lote(nomes, nivel=None)
+    
+    return _resposta(lambda: {"importados": len(criados), "nomes": [p.nome for p in criados]})
+
+
 # -- Times ------------------------------------------------------------
 @app.post("/api/times/montar")
 def montar_times(payload: dict):

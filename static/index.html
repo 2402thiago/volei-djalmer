@@ -49,6 +49,16 @@
           <button id="btn-adicionar" class="primario">+</button>
         </div>
       </div>
+      <div class="card acao" id="importar-box">
+        <label>Importar lista do WhatsApp (24 titulares)</label>
+        <textarea id="whatsapp-texto" placeholder="Cole a mensagem do grupo aqui..." rows="8"></textarea>
+        <div class="linha">
+          <button id="btn-preview" class="secundario">Visualizar 24 titulares</button>
+          <button id="btn-confirmar-importar" class="primario" style="display:none">Confirmar importação</button>
+        </div>
+        <div id="preview-importar" class="preview-lista" style="display:none"></div>
+        <p id="msg-importar" class="msg"></p>
+      </div>
       <div id="lista-participantes" class="lista"></div>
     </section>
 

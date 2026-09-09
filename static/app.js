@@ -22,6 +22,27 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;",
 }[c]));
 
+// Função: extrair os 24 titulares da mensagem do WhatsApp
+function extrairTitulares(texto) {
+  const linhas = texto.split("\n");
+  const titulares = [];
+  let naLista = false;
+
+  for (const linha of linhas) {
+    const t = linha.trim();
+    if (/^1\./.test(t)) naLista = true;
+    if (/^Espera Grupo/i.test(t) || /^Convidados/i.test(t)) break;
+    if (naLista) {
+      const m = t.match(/^\d+\.\s*(.+?)(?:\s*✅)?$/);
+      if (m) {
+        const nome = m[1].trim().replace(/^\(convidado\s+.+\)$/i, "");
+        if (nome && !nome.startsWith("(")) titulares.push(nome);
+      }
+    }
+  }
+  return titulares.slice(0, 24);
+}
+
 // ---- Navegação entre telas -------------------------------------------
 document.querySelectorAll(".aba").forEach((btn) => {
   btn.addEventListener("click", () => {
@@ -262,4 +283,42 @@ async function atualizarDados() {
 (async function init() {
   await atualizarDados();
   setInterval(atualizarDados, INTERVALO_REFRESH_MS);
+
+  // Importar da lista WhatsApp
+  $("btn-preview").addEventListener("click", () => {
+    const texto = $("whatsapp-texto").value.trim();
+    if (!texto) return alert("Cole o texto primeiro.");
+
+    const nomes = extrairTitulares(texto);
+    if (!nomes.length) return alert("Nenhum titular encontrado no formato esperado.");
+
+    $("preview-importar").innerHTML = nomes.map((n, i) =>
+      `<div class="preview-item">${i + 1}. ${esc(n)}</div>`).join("");
+    $("preview-importar").style.display = "block";
+    $("btn-confirmar-importar").style.display = "inline-block";
+    $("msg-importar").textContent = `${nomes.length} titulares encontrados.`;
+    $("msg-importar").className = "msg";
+  });
+
+  $("btn-confirmar-importar").addEventListener("click", async () => {
+    const texto = $("whatsapp-texto").value.trim();
+    const nomes = extrairTitulares(texto);
+
+    try {
+      $("btn-confirmar-importar").disabled = true;
+      $("msg-importar").textContent = "Importando e limpando lista anterior...";
+      const resp = await api.enviar("/api/participantes/importar", "POST", { nomes });
+      $("msg-importar").textContent = `✅ ${resp.importados} importados. Lista anterior removida.`;
+      $("msg-importar").className = "msg";
+      $("whatsapp-texto").value = "";
+      $("preview-importar").style.display = "none";
+      $("btn-confirmar-importar").style.display = "none";
+      await Promise.all([carregarParticipantes(), carregarTimes()]);
+    } catch (e) {
+      $("msg-importar").textContent = e.message;
+      $("msg-importar").className = "msg erro";
+    } finally {
+      $("btn-confirmar-importar").disabled = false;
+    }
+  });
 })();

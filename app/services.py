@@ -32,7 +32,9 @@ def _validar_nome(nome: str) -> str:
     return nome
 
 
-def _validar_nivel(nivel: int) -> int:
+def _validar_nivel(nivel: int | None) -> int | None:
+    if nivel is None:
+        return None
     try:
         nivel = int(nivel)
     except (TypeError, ValueError):
@@ -52,7 +54,7 @@ class ServicoParticipantes:
     def __init__(self, repo: Repositorio[Participante]) -> None:
         self.repo = repo
 
-    def criar(self, nome: str, nivel: int = 3) -> Participante:
+    def criar(self, nome: str, nivel: int | None = None) -> Participante:
         nome = _validar_nome(nome)
         nivel = _validar_nivel(nivel)
         p = Participante(nome=nome, nivel=nivel, status="ativo")
@@ -90,6 +92,24 @@ class ServicoParticipantes:
     def remover(self, id_: str) -> bool:
         p = self.obter(id_)
         return self.repo.remover(p.id)
+
+    def limpar_todos(self) -> int:
+        """Remove todos os participantes. Retorna quantidade removida."""
+        todos = self.repo.obter_todos()
+        for p in todos:
+            self.repo.remover(p.id)
+        return len(todos)
+
+    def criar_em_lote(self, nomes: list[str], nivel: int | None = None) -> list[Participante]:
+        """Cria múltiplos participantes. Ignora erros (duplicatas, inválidos)."""
+        criados = []
+        for nome in nomes:
+            try:
+                p = self.criar(nome, nivel)
+                criados.append(p)
+            except ErroDeDominio:
+                pass
+        return criados
 
 
 # ---------------------------------------------------------------------------

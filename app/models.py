@@ -38,7 +38,7 @@ class Participante:
     """Um participante cadastrado no torneio."""
 
     nome: str
-    nivel: int = 3
+    nivel: int | None = None
     status: str = "ativo"
     id: str = field(default_factory=novo_id)
     criado_em: str = field(default_factory=agora_iso)
@@ -49,7 +49,7 @@ class Participante:
         return {
             "id": self.id,
             "nome": self.nome,
-            "nivel": str(self.nivel),
+            "nivel": str(self.nivel) if self.nivel is not None else "",
             "status": self.status,
             "criado_em": self.criado_em,
             "atualizado_em": self.atualizado_em,
@@ -61,7 +61,7 @@ class Participante:
         return cls(
             id=linha["id"],
             nome=linha["nome"],
-            nivel=int(linha["nivel"]),
+            nivel=int(linha["nivel"]) if linha.get("nivel") else None,
             status=linha["status"],
             criado_em=linha["criado_em"],
             atualizado_em=linha["atualizado_em"],
