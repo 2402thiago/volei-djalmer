@@ -69,6 +69,11 @@ def alterar_status_participante(id_: str, payload: dict):
     ).to_linha())
 
 
+@app.delete("/api/participantes/{id_}")
+def remover_participante(id_: str):
+    return _resposta(lambda: {"ok": runtime.servico_participantes.remover(id_)})
+
+
 # -- Times ------------------------------------------------------------
 @app.post("/api/times/montar")
 def montar_times(payload: dict):

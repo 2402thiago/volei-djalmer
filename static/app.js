@@ -64,6 +64,7 @@ function renderParticipantes() {
           <option value="inativo" ${p.status === "inativo" ? "selected" : ""}>Inativo</option>
         </select>
         <button class="ponto" data-nivel="${p.id}" data-atual="${p.nivel}" title="Editar nível">${p.nivel}</button>
+        <button class="remover" data-id="${p.id}" title="Remover">🗑️</button>
       </div>`;
     lista.appendChild(item);
   });
@@ -81,6 +82,14 @@ function renderParticipantes() {
         await api.enviar(`/api/participantes/${btn.dataset.nivel}`, "PATCH", { nivel: novo });
         await carregarParticipantes();
       }
+    });
+  });
+
+  lista.querySelectorAll(".remover[data-id]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      if (!confirm("Remover este participante?")) return;
+      await api.enviar(`/api/participantes/${btn.dataset.id}`, "DELETE");
+      await carregarParticipantes();
     });
   });
 }

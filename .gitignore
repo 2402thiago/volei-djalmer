@@ -28,3 +28,5 @@ Thumbs.db
 
 # Cache local do sistema (estado de sincronização)
 *.cache.json
+.vercel
+.env*

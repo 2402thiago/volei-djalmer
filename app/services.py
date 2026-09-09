@@ -87,6 +87,10 @@ class ServicoParticipantes:
         p.atualizado_em = models.agora_iso()
         return self.repo.salvar(p)
 
+    def remover(self, id_: str) -> bool:
+        p = self.obter(id_)
+        return self.repo.remover(p.id)
+
 
 # ---------------------------------------------------------------------------
 # Times (balanceamento)
