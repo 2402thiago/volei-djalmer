@@ -89,7 +89,10 @@ function renderParticipantes() {
   const exibidos = participantes.filter((p) => (
     (!filtrosParticipantes.sexo || p.sexo === filtrosParticipantes.sexo) &&
     (!filtrosParticipantes.nivel || p.nivel === filtrosParticipantes.nivel)
-  ));
+  )).sort((a, b) => {
+    if (!filtrosParticipantes.nivel) return 0;
+    return (a.ranking || Number.MAX_SAFE_INTEGER) - (b.ranking || Number.MAX_SAFE_INTEGER);
+  });
   $("contador-filtros").textContent = `${exibidos.length} de ${participantes.length} participantes`;
   if (!exibidos.length) {
     lista.innerHTML = '<div class="card">Nenhum participante ainda. Adicione acima.</div>';
@@ -97,7 +100,9 @@ function renderParticipantes() {
   }
   exibidos.forEach((p) => {
     const item = document.createElement("div");
-    item.className = "item";
+    item.className = "item participante-item";
+    item.draggable = Boolean(filtrosParticipantes.nivel && p.nivel === filtrosParticipantes.nivel);
+    item.dataset.participanteId = p.id;
     item.innerHTML = `
       <div>
         <div class="nome">${esc(p.nome)}</div>
@@ -158,6 +163,38 @@ function renderParticipantes() {
       await carregarParticipantes();
     });
   });
+
+  if (filtrosParticipantes.nivel) {
+    lista.querySelectorAll(".participante-item[draggable='true']").forEach((item) => {
+      item.addEventListener("dragstart", () => item.classList.add("arrastando"));
+      item.addEventListener("dragend", () => item.classList.remove("arrastando"));
+      item.addEventListener("dragover", (event) => event.preventDefault());
+      item.addEventListener("drop", (event) => {
+        event.preventDefault();
+        const origem = lista.querySelector(".arrastando");
+        if (!origem || origem === item) return;
+        const rect = item.getBoundingClientRect();
+        const depois = event.clientY > rect.top + rect.height / 2;
+        lista.insertBefore(origem, depois ? item.nextSibling : item);
+        salvarRankingDoNivel();
+      });
+    });
+  }
+}
+
+function salvarRankingDoNivel() {
+  if (!filtrosParticipantes.nivel) return;
+  const ids = [...$("lista-participantes").querySelectorAll(".participante-item")]
+    .map((item) => item.dataset.participanteId);
+  const ranking = new Map(ids.map((id, index) => [id, index + 1]));
+  participantes.forEach((p) => {
+    if (p.nivel === filtrosParticipantes.nivel && ranking.has(p.id)) {
+      p.ranking = ranking.get(p.id);
+      p.atualizado_em = new Date().toISOString();
+    }
+  });
+  salvarParticipantesLocais();
+  renderParticipantes();
 }
 
 async function editarParticipante(id, alteracoes) {
@@ -194,6 +231,7 @@ $("filtro-sexo").addEventListener("change", (event) => {
 
 $("filtro-nivel").addEventListener("change", (event) => {
   filtrosParticipantes.nivel = event.target.value;
+  document.querySelectorAll(".atalho-nivel").forEach((item) => item.classList.toggle("ativo", item.dataset.nivel === filtrosParticipantes.nivel));
   renderParticipantes();
 });
 
@@ -202,7 +240,18 @@ $("btn-limpar-filtros").addEventListener("click", () => {
   filtrosParticipantes.nivel = "";
   $("filtro-sexo").value = "";
   $("filtro-nivel").value = "";
+  document.querySelectorAll(".atalho-nivel").forEach((item) => item.classList.toggle("ativo", item.dataset.nivel === ""));
   renderParticipantes();
+});
+
+document.querySelectorAll(".atalho-nivel").forEach((botao) => {
+  botao.addEventListener("click", () => {
+    filtrosParticipantes.nivel = botao.dataset.nivel;
+    $("filtro-nivel").value = filtrosParticipantes.nivel;
+    document.querySelectorAll(".atalho-nivel").forEach((item) => item.classList.remove("ativo"));
+    botao.classList.add("ativo");
+    renderParticipantes();
+  });
 });
 
 // ---- Times -----------------------------------------------------------

@@ -82,6 +82,9 @@ textarea { width: 100%; resize: vertical; min-height: 140px; }
 .linha-acoes { flex-wrap: wrap; }
 .filtros-participantes .linha { flex-wrap: wrap; }
 .filtros-participantes select { flex: 1; min-width: 130px; }
+.atalhos-niveis { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.atalho-nivel { padding: 7px 10px; border-radius: 999px; color: var(--texto-suave); }
+.atalho-nivel.ativo { background: var(--acento); border-color: var(--acento); color: #fff; font-weight: 600; }
 .botao-arquivo { display: inline-flex; align-items: center; cursor: pointer; }
 .botao-arquivo input { display: none; }
 
@@ -141,6 +144,9 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .item .acoes input { min-width: 52px; padding: 4px 6px; }
 .item .acoes .edicao-nome { width: 120px; }
 .item .acoes .edicao-ranking { width: 54px; }
+.participante-item[draggable="true"] { cursor: grab; }
+.participante-item[draggable="true"]:active { cursor: grabbing; }
+.participante-item.arrastando { opacity: 0.45; border: 1px dashed var(--acento); }
 .ponto { min-width: 30px; height: 30px; border-radius: 50%; padding: 0; font-weight: 700; }
 
 @media (max-width: 520px) {
