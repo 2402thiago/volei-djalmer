@@ -487,28 +487,4 @@ async function atualizarDados() {
     }
   });
 
-  $("btn-exportar").addEventListener("click", () => {
-    const blob = new Blob([JSON.stringify({ participantes }, null, 2)], { type: "application/json" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = "volei-backup.json";
-    link.click();
-    URL.revokeObjectURL(link.href);
-  });
-
-  $("arquivo-backup").addEventListener("change", async (event) => {
-    const arquivo = event.target.files[0];
-    if (!arquivo) return;
-    try {
-      const dados = JSON.parse(await arquivo.text());
-      if (!Array.isArray(dados.participantes)) throw new Error("Backup inválido.");
-      participantes = dados.participantes;
-      salvarParticipantesLocais();
-      await carregarParticipantes();
-      $("msg-sincronizar").textContent = "Backup restaurado localmente.";
-    } catch (e) {
-      $("msg-sincronizar").textContent = `Falha ao restaurar backup: ${e.message}`;
-      $("msg-sincronizar").className = "msg erro";
-    }
-  });
 })();
