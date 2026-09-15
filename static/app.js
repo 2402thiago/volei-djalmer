@@ -22,6 +22,15 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;",
 }[c]));
 
+const STORAGE_PARTICIPANTES = "volei.participantes.v1";
+const novoId = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
+function salvarParticipantesLocais() {
+  localStorage.setItem(STORAGE_PARTICIPANTES, JSON.stringify(participantes));
+}
+function lerParticipantesLocais() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_PARTICIPANTES) || "null"); } catch { return null; }
+}
+
 // Função: extrair os 24 titulares da mensagem do WhatsApp
 function extrairTitulares(texto) {
   const linhas = texto.split("\n");
@@ -58,7 +67,17 @@ let participantes = [];
 let participanteId = new Map();
 
 async function carregarParticipantes() {
-  participantes = await api.get("/api/participantes");
+  const locais = lerParticipantesLocais();
+  if (Array.isArray(locais)) {
+    participantes = locais;
+  } else {
+    try {
+      participantes = await api.get("/api/participantes");
+      salvarParticipantesLocais();
+    } catch {
+      participantes = [];
+    }
+  }
   participanteId = new Map(participantes.map((p) => [p.nome, p.id]));
   renderParticipantes();
 }
@@ -107,7 +126,8 @@ function renderParticipantes() {
 
   lista.querySelectorAll("[data-status]").forEach((sel) => {
     sel.addEventListener("change", async () => {
-      await api.enviar(`/api/participantes/${sel.dataset.status}/status`, "PATCH", { status: sel.value });
+      const p = participantes.find((item) => item.id === sel.dataset.status);
+      if (p) { p.status = sel.value; p.atualizado_em = new Date().toISOString(); salvarParticipantesLocais(); }
       await carregarParticipantes();
     });
   });
@@ -127,7 +147,8 @@ function renderParticipantes() {
   lista.querySelectorAll(".remover[data-id]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       if (!confirm("Remover este participante?")) return;
-      await api.enviar(`/api/participantes/${btn.dataset.id}`, "DELETE");
+      participantes = participantes.filter((item) => item.id !== btn.dataset.id);
+      salvarParticipantesLocais();
       await carregarParticipantes();
     });
   });
@@ -135,7 +156,10 @@ function renderParticipantes() {
 
 async function editarParticipante(id, alteracoes) {
   try {
-    await api.enviar(`/api/participantes/${id}`, "PATCH", alteracoes);
+    const p = participantes.find((item) => item.id === id);
+    if (!p) return;
+    Object.assign(p, alteracoes, { atualizado_em: new Date().toISOString() });
+    salvarParticipantesLocais();
     await carregarParticipantes();
   } catch (e) {
     alert(e.message);
@@ -148,7 +172,8 @@ $("btn-adicionar").addEventListener("click", async () => {
   const nivel = $("novo-nivel").value || null;
   if (!nome) return;
   try {
-    await api.enviar("/api/participantes", "POST", { nome, sexo, nivel });
+    participantes.push({ id: novoId(), nome, sexo, nivel, ranking: null, status: "ativo", criado_em: new Date().toISOString(), atualizado_em: new Date().toISOString() });
+    salvarParticipantesLocais();
     $("novo-nome").value = "";
     await Promise.all([carregarParticipantes(), carregarTimes()]);
   } catch (e) {
@@ -335,8 +360,9 @@ async function atualizarDados() {
     try {
       $("btn-confirmar-importar").disabled = true;
       $("msg-importar").textContent = "Importando e limpando lista anterior...";
-      const resp = await api.enviar("/api/participantes/importar", "POST", { nomes });
-      $("msg-importar").textContent = `✅ ${resp.importados} importados. Lista anterior removida.`;
+      participantes = nomes.map((nome) => ({ id: novoId(), nome, sexo: "", nivel: null, ranking: null, status: "ativo", criado_em: new Date().toISOString(), atualizado_em: new Date().toISOString() }));
+      salvarParticipantesLocais();
+      $("msg-importar").textContent = `✅ ${nomes.length} importados localmente. Lista anterior removida.`;
       $("msg-importar").className = "msg";
       $("whatsapp-texto").value = "";
       $("preview-importar").style.display = "none";
@@ -347,6 +373,45 @@ async function atualizarDados() {
       $("msg-importar").className = "msg erro";
     } finally {
       $("btn-confirmar-importar").disabled = false;
+    }
+  });
+
+  $("btn-sincronizar").addEventListener("click", async () => {
+    try {
+      $("btn-sincronizar").disabled = true;
+      $("msg-sincronizar").textContent = "Sincronizando...";
+      const r = await api.enviar("/api/participantes/sincronizar", "POST", { participantes });
+      $("msg-sincronizar").textContent = `${r.sincronizados} participantes enviados para a planilha.`;
+    } catch (e) {
+      $("msg-sincronizar").textContent = `Falha na sincronização: ${e.message}`;
+      $("msg-sincronizar").className = "msg erro";
+    } finally {
+      $("btn-sincronizar").disabled = false;
+    }
+  });
+
+  $("btn-exportar").addEventListener("click", () => {
+    const blob = new Blob([JSON.stringify({ participantes }, null, 2)], { type: "application/json" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "volei-backup.json";
+    link.click();
+    URL.revokeObjectURL(link.href);
+  });
+
+  $("arquivo-backup").addEventListener("change", async (event) => {
+    const arquivo = event.target.files[0];
+    if (!arquivo) return;
+    try {
+      const dados = JSON.parse(await arquivo.text());
+      if (!Array.isArray(dados.participantes)) throw new Error("Backup inválido.");
+      participantes = dados.participantes;
+      salvarParticipantesLocais();
+      await carregarParticipantes();
+      $("msg-sincronizar").textContent = "Backup restaurado localmente.";
+    } catch (e) {
+      $("msg-sincronizar").textContent = `Falha ao restaurar backup: ${e.message}`;
+      $("msg-sincronizar").className = "msg erro";
     }
   });
 })();

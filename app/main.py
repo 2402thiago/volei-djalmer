@@ -91,6 +91,22 @@ def importar_participantes(payload: dict):
     return _resposta(importar)
 
 
+@app.post("/api/participantes/sincronizar")
+def sincronizar_participantes(payload: dict):
+    """Substitui a aba de participantes somente quando solicitado manualmente."""
+    def sincronizar():
+        participantes = payload.get("participantes", [])
+        if not isinstance(participantes, list):
+            raise ErroDeDominio("Participantes inválidos.")
+        runtime.servico_participantes.limpar_todos()
+        criados = [runtime.servico_participantes.criar(
+            item.get("nome", ""), item.get("nivel"), item.get("sexo", ""), item.get("ranking")
+        ) for item in participantes]
+        return {"sincronizados": len(criados)}
+
+    return _resposta(sincronizar)
+
+
 # -- Times ------------------------------------------------------------
 @app.post("/api/times/montar")
 def montar_times(payload: dict):

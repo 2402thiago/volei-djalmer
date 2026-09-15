@@ -77,6 +77,11 @@ body {
   margin-bottom: 10px;
 }
 .linha { display: flex; gap: 8px; }
+.linha > * { min-width: 0; }
+textarea { width: 100%; resize: vertical; min-height: 140px; }
+.linha-acoes { flex-wrap: wrap; }
+.botao-arquivo { display: inline-flex; align-items: center; cursor: pointer; }
+.botao-arquivo input { display: none; }
 
 input, select, button {
   font: inherit;
@@ -137,9 +142,16 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .ponto { min-width: 30px; height: 30px; border-radius: 50%; padding: 0; font-weight: 700; }
 
 @media (max-width: 520px) {
+  .linha:not(.linha-acoes) { flex-wrap: wrap; }
+  #novo-nome { flex-basis: 100%; }
+  #novo-sexo, #novo-nivel { flex: 1; }
+  #btn-adicionar { width: 48px; }
   .lista .item { align-items: flex-start; gap: 8px; }
+  .lista .item > div:first-child { width: 100%; }
+  .lista .item { flex-direction: column; }
   .item .acoes { flex-wrap: wrap; justify-content: flex-end; }
   .item .acoes .edicao-nome { width: 100%; }
+  .item .acoes { width: 100%; }
 }
 
 .placar { display: flex; gap: 12px; margin: 16px 0; }

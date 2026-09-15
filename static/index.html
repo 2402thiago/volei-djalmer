@@ -67,6 +67,15 @@
         <div id="preview-importar" class="preview-lista" style="display:none"></div>
         <p id="msg-importar" class="msg"></p>
       </div>
+      <div class="card acao dados-locais">
+        <label>Dados locais</label>
+        <div class="linha linha-acoes">
+          <button id="btn-sincronizar" class="secundario">Sincronizar com planilha</button>
+          <button id="btn-exportar" class="secundario">Exportar backup</button>
+          <label class="botao-arquivo secundario">Importar backup<input id="arquivo-backup" type="file" accept="application/json" /></label>
+        </div>
+        <p id="msg-sincronizar" class="msg">Os dados ficam salvos neste navegador.</p>
+      </div>
       <div id="lista-participantes" class="lista"></div>
     </section>
 
