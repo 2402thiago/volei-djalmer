@@ -29,16 +29,16 @@ def repo_partidas():
     return RepositorioMemoria()
 
 
-def _participante(nome: str, nivel: int) -> Participante:
+def _participante(nome: str, nivel: str) -> Participante:
     return Participante(nome=nome, nivel=nivel)
 
 
 class TestServicoParticipantes:
     def test_criar_participante(self, repo_participantes):
         s = ServicoParticipantes(repo_participantes)
-        p = s.criar("Ana", nivel=5)
+        p = s.criar("Ana", nivel="C1")
         assert p.nome == "Ana"
-        assert p.nivel == 5
+        assert p.nivel == "C1"
         assert p.status == "ativo"
         assert repo_participantes.obter(p.id) is not None
 
@@ -50,30 +50,33 @@ class TestServicoParticipantes:
     def test_criar_nivel_fora_da_faixa_falha(self, repo_participantes):
         s = ServicoParticipantes(repo_participantes)
         with pytest.raises(Exception):
-            s.criar("Bruno", nivel=9)
+            s.criar("Bruno", nivel="9")
 
     def test_listar_ignora_inativos(self, repo_participantes):
         s = ServicoParticipantes(repo_participantes)
-        p1 = s.criar("Ana", nivel=4)
+        p1 = s.criar("Ana", nivel="M1")
         s.alterar_status(p1.id, "inativo")
-        s.criar("Bia", nivel=2)
+        s.criar("Bia", nivel="M2")
         assert len(s.listar()) == 1
 
     def test_editar_nome_e_nivel(self, repo_participantes):
         s = ServicoParticipantes(repo_participantes)
-        p = s.criar("Ana", nivel=3)
-        p2 = s.editar(p.id, nome="Ana Souza", nivel=5)
+        p = s.criar("Ana", nivel="M2")
+        p2 = s.editar(p.id, nome="Ana Souza", nivel="C1", sexo="F", ranking=1)
         assert p2.nome == "Ana Souza"
-        assert p2.nivel == 5
+        assert p2.nivel == "C1"
+        assert p2.sexo == "F"
+        assert p2.ranking == 1
 
 
 class TestBalanceamento:
     def test_snake_draft_equilibra_media(self):
-        niveis = [5, 4, 4, 3, 3, 2]
+        niveis = ["C1", "M1", "M1", "M2", "F1", "F2"]
         partes = [_participante(f"p{i}", n) for i, n in enumerate(niveis)]
         times = balancear_times(partes, num_times=2)
+        pesos = {"C1": 7, "M1": 6, "M2": 5, "F1": 4, "F2": 3, "LM1": 2, "LF1": 1}
         medias = sorted(
-            sum(p.nivel for p in t) / len(t) for t in times
+            sum(pesos[p.nivel] for p in t) / len(t) for t in times
         )
         # T1=[5,3,3] 3.67 e T2=[4,4,2] 3.33 -> próximas entre si.
         assert max(medias) - min(medias) < 1.0
@@ -96,7 +99,7 @@ class TestBalanceamento:
 class TestServicoTimes:
     def test_montar_cria_times_balanceados(self, repo_participantes, repo_times):
         sp = ServicoParticipantes(repo_participantes)
-        for nome, nivel in [("A", 5), ("B", 1), ("C", 4), ("D", 2), ("E", 3), ("F", 3)]:
+        for nome, nivel in [("A", "C1"), ("B", "LF1"), ("C", "M1"), ("D", "M2"), ("E", "F1"), ("F", "F1")]:
             sp.criar(nome, nivel)
         st = ServicoTimes(repo_times, repo_participantes)
         times = st.montar(num_times=2)
@@ -106,7 +109,7 @@ class TestServicoTimes:
     def test_montar_substitui_times_anteriores(self, repo_participantes, repo_times):
         sp = ServicoParticipantes(repo_participantes)
         for i in range(6):
-            sp.criar(f"J{i}", (i % 5) + 1)
+            sp.criar(f"J{i}", ("C1", "M1", "M2", "F1", "F2")[i % 5])
         st = ServicoTimes(repo_times, repo_participantes)
         st.montar(num_times=2)
         st.montar(num_times=3)
@@ -114,7 +117,7 @@ class TestServicoTimes:
 
     def test_composicao(self, repo_participantes, repo_times):
         sp = ServicoParticipantes(repo_participantes)
-        p = sp.criar("Ana", 4)
+        p = sp.criar("Ana", "M1")
         st = ServicoTimes(repo_times, repo_participantes)
         times = st.montar(num_times=1)
         time, comp = st.composicao(times[0].id)

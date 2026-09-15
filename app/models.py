@@ -22,7 +22,7 @@ def novo_id() -> str:
 
 # Colunas de cada aba. A ordem define o layout da planilha.
 PARTICIPANTES_COLUNAS = [
-    "id", "nome", "nivel", "status", "criado_em", "atualizado_em",
+    "id", "nome", "sexo", "nivel", "ranking", "status", "criado_em", "atualizado_em",
 ]
 # `atualizado_em` no Time garante a resolução "última escrita vence"
 # na sincronização bidirecional (decisão da Fase 0).
@@ -38,7 +38,9 @@ class Participante:
     """Um participante cadastrado no torneio."""
 
     nome: str
+    sexo: str = ""
     nivel: int | None = None
+    ranking: int | None = None
     status: str = "ativo"
     id: str = field(default_factory=novo_id)
     criado_em: str = field(default_factory=agora_iso)
@@ -49,7 +51,9 @@ class Participante:
         return {
             "id": self.id,
             "nome": self.nome,
+            "sexo": self.sexo,
             "nivel": str(self.nivel) if self.nivel is not None else "",
+            "ranking": str(self.ranking) if self.ranking is not None else "",
             "status": self.status,
             "criado_em": self.criado_em,
             "atualizado_em": self.atualizado_em,
@@ -61,7 +65,9 @@ class Participante:
         return cls(
             id=linha["id"],
             nome=linha["nome"],
+            sexo=linha.get("sexo", "").upper(),
             nivel=int(linha["nivel"]) if linha.get("nivel") else None,
+            ranking=int(linha["ranking"]) if linha.get("ranking") else None,
             status=linha["status"],
             criado_em=linha["criado_em"],
             atualizado_em=linha["atualizado_em"],

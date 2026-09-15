@@ -131,7 +131,16 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .item .det { color: var(--texto-suave); font-size: 12px; }
 .item .acoes { display: flex; gap: 6px; align-items: center; }
 .item .acoes select { padding: 4px 6px; border-radius: 8px; }
+.item .acoes input { min-width: 52px; padding: 4px 6px; }
+.item .acoes .edicao-nome { width: 120px; }
+.item .acoes .edicao-ranking { width: 54px; }
 .ponto { min-width: 30px; height: 30px; border-radius: 50%; padding: 0; font-weight: 700; }
+
+@media (max-width: 520px) {
+  .lista .item { align-items: flex-start; gap: 8px; }
+  .item .acoes { flex-wrap: wrap; justify-content: flex-end; }
+  .item .acoes .edicao-nome { width: 100%; }
+}
 
 .placar { display: flex; gap: 12px; margin: 16px 0; }
 .time-placar {

@@ -13,9 +13,10 @@ from . import models
 from .models import Partida, Participante, Time
 from .repo import Repositorio
 
-NIVEL_MIN = 1
-NIVEL_MAX = 5
+NIVEIS = ("C1", "M1", "M2", "F1", "F2", "LM1", "LF1")
+ORDEM_NIVEIS = {nivel: len(NIVEIS) - indice for indice, nivel in enumerate(NIVEIS)}
 STATUS_VALIDOS = ("ativo", "inativo")
+SEXOS_VALIDOS = ("", "F", "M")
 STATUS_PARTIDA_VALIDOS = ("agendado", "em_andamento", "concluida")
 
 
@@ -32,16 +33,34 @@ def _validar_nome(nome: str) -> str:
     return nome
 
 
-def _validar_nivel(nivel: int | None) -> int | None:
+def _validar_nivel(nivel: str | None) -> str | None:
     if nivel is None:
         return None
-    try:
-        nivel = int(nivel)
-    except (TypeError, ValueError):
+    nivel = str(nivel).strip().upper()
+    if not nivel:
+        return None
+    if nivel not in NIVEIS:
         raise ErroDeDominio(f"Nível inválido: {nivel!r}.")
-    if not (NIVEL_MIN <= nivel <= NIVEL_MAX):
-        raise ErroDeDominio(f"Nível deve estar entre {NIVEL_MIN} e {NIVEL_MAX}.")
     return nivel
+
+
+def _validar_sexo(sexo: str | None) -> str:
+    sexo = (sexo or "").strip().upper()
+    if sexo not in SEXOS_VALIDOS:
+        raise ErroDeDominio("Sexo deve ser F ou M.")
+    return sexo
+
+
+def _validar_ranking(ranking: int | None) -> int | None:
+    if ranking in (None, ""):
+        return None
+    try:
+        ranking = int(ranking)
+    except (TypeError, ValueError):
+        raise ErroDeDominio("Ranking deve ser um número inteiro positivo.")
+    if ranking < 1:
+        raise ErroDeDominio("Ranking deve ser um número inteiro positivo.")
+    return ranking
 
 
 # ---------------------------------------------------------------------------
@@ -54,10 +73,15 @@ class ServicoParticipantes:
     def __init__(self, repo: Repositorio[Participante]) -> None:
         self.repo = repo
 
-    def criar(self, nome: str, nivel: int | None = None) -> Participante:
+    def criar(
+        self, nome: str, nivel: str | None = None, sexo: str | None = "",
+        ranking: int | None = None,
+    ) -> Participante:
         nome = _validar_nome(nome)
         nivel = _validar_nivel(nivel)
-        p = Participante(nome=nome, nivel=nivel, status="ativo")
+        sexo = _validar_sexo(sexo)
+        ranking = _validar_ranking(ranking)
+        p = Participante(nome=nome, sexo=sexo, nivel=nivel, ranking=ranking, status="ativo")
         return self.repo.salvar(p)
 
     def listar(self, incluir_inativos: bool = False) -> list[Participante]:
@@ -72,12 +96,19 @@ class ServicoParticipantes:
             raise ErroDeDominio(f"Participante não encontrado: {id_}.")
         return p
 
-    def editar(self, id_: str, nome: str | None = None, nivel: int | None = None) -> Participante:
+    def editar(
+        self, id_: str, nome: str | None = None, nivel: str | None = None,
+        sexo: str | None = None, ranking: int | None = None,
+    ) -> Participante:
         p = self.obter(id_)
         if nome is not None:
             p.nome = _validar_nome(nome)
         if nivel is not None:
             p.nivel = _validar_nivel(nivel)
+        if sexo is not None:
+            p.sexo = _validar_sexo(sexo)
+        if ranking is not None:
+            p.ranking = _validar_ranking(ranking)
         p.atualizado_em = models.agora_iso()
         return self.repo.salvar(p)
 
@@ -100,7 +131,7 @@ class ServicoParticipantes:
             self.repo.remover(p.id)
         return len(todos)
 
-    def criar_em_lote(self, nomes: list[str], nivel: int | None = None) -> list[Participante]:
+    def criar_em_lote(self, nomes: list[str], nivel: str | None = None) -> list[Participante]:
         """Cria múltiplos participantes. Ignora erros (duplicatas, inválidos)."""
         criados = []
         for nome in nomes:
@@ -131,7 +162,15 @@ def balancear_times(
     if not ativos:
         raise ErroDeDominio("Não há participantes ativos para montar os times.")
 
-    ordenados = sorted(ativos, key=lambda p: (-p.nivel, p.criado_em))
+    sem_nivel = len(NIVEIS) + 1
+    ordenados = sorted(
+        ativos,
+        key=lambda p: (
+            -ORDEM_NIVEIS.get(p.nivel, 0) if p.nivel else sem_nivel,
+            p.ranking if p.ranking is not None else sem_nivel,
+            p.criado_em,
+        ),
+    )
     times: list[list[Participante]] = [[] for _ in range(num_times)]
 
     for indice, participante in enumerate(ordenados):
@@ -169,7 +208,10 @@ class ServicoTimes:
         criados: list[Time] = []
         for i, grupo in enumerate(agrupados, start=1):
             jogadores = [p.id for p in grupo]
-            media = sum(p.nivel for p in grupo) / len(grupo) if grupo else 0.0
+            media = (
+                sum(ORDEM_NIVEIS.get(p.nivel, 0) for p in grupo) / len(grupo)
+                if grupo else 0.0
+            )
             time = Time(
                 nome=f"{prefixo_nome} {i}",
                 jogadores=jogadores,

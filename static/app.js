@@ -49,7 +49,6 @@ document.querySelectorAll(".aba").forEach((btn) => {
     document.querySelectorAll(".aba").forEach((b) => b.classList.remove("ativa"));
     document.querySelectorAll(".tela").forEach((t) => t.classList.remove("ativa"));
     btn.classList.add("ativa");
-    $("participantes").classList.remove("ativa");
     document.getElementById(btn.dataset.tela).classList.add("ativa");
   });
 });
@@ -77,14 +76,30 @@ function renderParticipantes() {
     item.innerHTML = `
       <div>
         <div class="nome">${esc(p.nome)}</div>
-        <div class="det">Nível: ${p.nivel} · ${p.status}</div>
+        <div class="det">${p.sexo || "Sexo não definido"} · ${p.nivel || "Nível não definido"} · ${p.ranking ? `${p.ranking}º` : "Ranking não definido"} · ${p.status}</div>
       </div>
       <div class="acoes">
+        <input class="edicao-nome" data-nome="${p.id}" value="${esc(p.nome)}" maxlength="80" title="Nome" />
+        <select data-sexo="${p.id}" title="Sexo">
+          <option value="" ${!p.sexo ? "selected" : ""}>Sexo</option>
+          <option value="F" ${p.sexo === "F" ? "selected" : ""}>F</option>
+          <option value="M" ${p.sexo === "M" ? "selected" : ""}>M</option>
+        </select>
+        <select data-nivel="${p.id}" title="Nível">
+          <option value="" ${!p.nivel ? "selected" : ""}>Nível</option>
+          <option value="C1" ${p.nivel === "C1" ? "selected" : ""}>C1</option>
+          <option value="M1" ${p.nivel === "M1" ? "selected" : ""}>M1</option>
+          <option value="M2" ${p.nivel === "M2" ? "selected" : ""}>M2</option>
+          <option value="F1" ${p.nivel === "F1" ? "selected" : ""}>F1</option>
+          <option value="F2" ${p.nivel === "F2" ? "selected" : ""}>F2</option>
+          <option value="LM1" ${p.nivel === "LM1" ? "selected" : ""}>LM1</option>
+          <option value="LF1" ${p.nivel === "LF1" ? "selected" : ""}>LF1</option>
+        </select>
+        <input class="edicao-ranking" data-ranking="${p.id}" type="number" min="1" placeholder="#" value="${p.ranking || ""}" title="Ranking no nível" />
         <select data-status="${p.id}" title="Status">
           <option value="ativo" ${p.status === "ativo" ? "selected" : ""}>Ativo</option>
           <option value="inativo" ${p.status === "inativo" ? "selected" : ""}>Inativo</option>
         </select>
-        <button class="ponto" data-nivel="${p.id}" data-atual="${p.nivel}" title="Editar nível">${p.nivel}</button>
         <button class="remover" data-id="${p.id}" title="Remover">🗑️</button>
       </div>`;
     lista.appendChild(item);
@@ -96,14 +111,17 @@ function renderParticipantes() {
       await carregarParticipantes();
     });
   });
-  lista.querySelectorAll("[data-nivel]").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      const novo = Number(prompt("Novo nível (1–5):", btn.dataset.atual));
-      if (novo >= 1 && novo <= 5) {
-        await api.enviar(`/api/participantes/${btn.dataset.nivel}`, "PATCH", { nivel: novo });
-        await carregarParticipantes();
-      }
-    });
+  lista.querySelectorAll("[data-nome]").forEach((input) => {
+    input.addEventListener("change", () => editarParticipante(input.dataset.nome, { nome: input.value }));
+  });
+  lista.querySelectorAll("[data-sexo]").forEach((select) => {
+    select.addEventListener("change", () => editarParticipante(select.dataset.sexo, { sexo: select.value }));
+  });
+  lista.querySelectorAll("[data-nivel]").forEach((select) => {
+    select.addEventListener("change", () => editarParticipante(select.dataset.nivel, { nivel: select.value }));
+  });
+  lista.querySelectorAll("[data-ranking]").forEach((input) => {
+    input.addEventListener("change", () => editarParticipante(input.dataset.ranking, { ranking: input.value }));
   });
 
   lista.querySelectorAll(".remover[data-id]").forEach((btn) => {
@@ -115,12 +133,22 @@ function renderParticipantes() {
   });
 }
 
+async function editarParticipante(id, alteracoes) {
+  try {
+    await api.enviar(`/api/participantes/${id}`, "PATCH", alteracoes);
+    await carregarParticipantes();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
 $("btn-adicionar").addEventListener("click", async () => {
   const nome = $("novo-nome").value.trim();
-  const nivel = Number($("novo-nivel").value);
+  const sexo = $("novo-sexo").value;
+  const nivel = $("novo-nivel").value || null;
   if (!nome) return;
   try {
-    await api.enviar("/api/participantes", "POST", { nome, nivel });
+    await api.enviar("/api/participantes", "POST", { nome, sexo, nivel });
     $("novo-nome").value = "";
     await Promise.all([carregarParticipantes(), carregarTimes()]);
   } catch (e) {

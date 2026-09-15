@@ -41,7 +41,8 @@ def _resposta(fn):
 def listar_participantes(incluir_inativos: bool = False):
     return _resposta(lambda: [
         {
-            "id": p.id, "nome": p.nome, "nivel": p.nivel,
+            "id": p.id, "nome": p.nome, "sexo": p.sexo,
+            "nivel": p.nivel, "ranking": p.ranking,
             "status": p.status,
         }
         for p in runtime.servico_participantes.listar(incluir_inativos)
@@ -51,14 +52,16 @@ def listar_participantes(incluir_inativos: bool = False):
 @app.post("/api/participantes")
 def criar_participante(payload: dict):
     return _resposta(lambda: runtime.servico_participantes.criar(
-        payload.get("nome", ""), payload.get("nivel", 3)
+        payload.get("nome", ""), payload.get("nivel"),
+        payload.get("sexo", ""), payload.get("ranking")
     ).to_linha())
 
 
 @app.patch("/api/participantes/{id_}")
 def editar_participante(id_: str, payload: dict):
     return _resposta(lambda: runtime.servico_participantes.editar(
-        id_, payload.get("nome"), payload.get("nivel")
+        id_, payload.get("nome"), payload.get("nivel"),
+        payload.get("sexo"), payload.get("ranking")
     ).to_linha())
 
 
@@ -77,14 +80,15 @@ def remover_participante(id_: str):
 @app.post("/api/participantes/importar")
 def importar_participantes(payload: dict):
     """Limpa lista atual e importa até 24 titulares sem nível."""
-    nomes = payload.get("nomes", [])[:24]
-    if not nomes:
-        raise ErroDeDominio("Lista de nomes vazia.")
-    
-    runtime.servico_participantes.limpar_todos()
-    criados = runtime.servico_participantes.criar_em_lote(nomes, nivel=None)
-    
-    return _resposta(lambda: {"importados": len(criados), "nomes": [p.nome for p in criados]})
+    def importar():
+        nomes = payload.get("nomes", [])[:24]
+        if not nomes:
+            raise ErroDeDominio("Lista de nomes vazia.")
+        runtime.servico_participantes.limpar_todos()
+        criados = runtime.servico_participantes.criar_em_lote(nomes, nivel=None)
+        return {"importados": len(criados), "nomes": [p.nome for p in criados]}
+
+    return _resposta(importar)
 
 
 # -- Times ------------------------------------------------------------
