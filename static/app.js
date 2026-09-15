@@ -294,9 +294,14 @@ document.querySelectorAll(".atalho-sexo").forEach((botao) => {
 
 // ---- Times -----------------------------------------------------------
 let times = [];
+const STORAGE_TIMES = "volei.times.v1";
+const STORAGE_PARTIDAS = "volei.partidas.v1";
+let partidas = [];
+function salvarTimesLocais() { localStorage.setItem(STORAGE_TIMES, JSON.stringify(times)); }
+function salvarPartidasLocais() { localStorage.setItem(STORAGE_PARTIDAS, JSON.stringify(partidas)); }
 
 async function carregarTimes() {
-  times = await api.get("/api/times");
+  try { times = JSON.parse(localStorage.getItem(STORAGE_TIMES) || "[]"); } catch { times = []; }
   renderTimes();
   preencherSeletores();
 }
@@ -308,28 +313,48 @@ function renderTimes() {
     grade.innerHTML = '<div class="card">Times ainda não montados.</div>';
     return;
   }
-  times.forEach(async (t) => {
+  times.forEach((t) => {
     const card = document.createElement("div");
     card.className = "card card-time";
     card.innerHTML = `<h3>${esc(t.nome)}</h3><div class="media">Média ${t.nivel_medio}</div><ul class="jogadores"></ul>`;
     grade.appendChild(card);
-    const comp = await api.get(`/api/times/${t.id}/composicao`);
     const ul = card.querySelector(".jogadores");
-    comp.participantes.forEach((p) => {
+    t.jogadores.forEach((p) => {
       const li = document.createElement("li");
-      li.innerHTML = `<span>${esc(p.nome)}</span><span class="pilha-nivel">${p.nivel}</span>`;
+      li.innerHTML = `<span>${esc(p.nome)}</span><span class="pilha-nivel">${p.nivel || "-"}</span>`;
       ul.appendChild(li);
     });
   });
 }
 
+function montarTimesLocais() {
+  const ativos = participantes.filter((p) => p.status === "ativo");
+  if (ativos.length !== 24) throw new Error(`É necessário ter exatamente 24 atletas ativos. Atual: ${ativos.length}.`);
+  const pendencias = ativos.filter((p) => !p.nivel || !p.ranking);
+  if (pendencias.length) throw new Error(`Há atletas sem nível ou ranking: ${pendencias.map((p) => p.nome).join(", ")}.`);
+  const niveis = ["C1", "M1", "M2", "F1", "F2", "LM1", "LF1"];
+  const potes = niveis.map((nivel) => ativos.filter((p) => p.nivel === nivel).sort((a, b) => a.ranking - b.ranking));
+  const faltantes = ["C1", "M1", "M2", "F1", "F2"].filter((nivel) => potes[niveis.indexOf(nivel)].length < 4);
+  if (faltantes.length) throw new Error(`Potes com menos de 4 atletas: ${faltantes.join(", ")}.`);
+  const novos = [0, 1, 2, 3].map((indice) => ({ id: novoId(), nome: `Time ${indice + 1}`, jogadores: [], nivel_medio: "0.00" }));
+  potes.forEach((pote) => pote.forEach((atleta) => {
+    const menor = Math.min(...novos.map((time) => time.jogadores.length));
+    const candidatos = novos.filter((time) => time.jogadores.length === menor);
+    candidatos.sort((a, b) => a.jogadores.filter((p) => p.sexo === atleta.sexo).length - b.jogadores.filter((p) => p.sexo === atleta.sexo).length);
+    candidatos[0].jogadores.push(atleta);
+  }));
+  if (novos.some((time) => time.jogadores.length !== 6)) throw new Error("Não foi possível formar 4 times com 6 atletas.");
+  return novos;
+}
+
 $("btn-montar").addEventListener("click", async () => {
-  const numTimes = Number($("num-times").value);
   try {
-    await api.enviar("/api/times/montar", "POST", { num_times: numTimes });
+    times = montarTimesLocais();
+    salvarTimesLocais();
     $("msg-montar").textContent = "Times montados com sucesso.";
     $("msg-montar").className = "msg";
-    await carregarTimes();
+    renderTimes();
+    preencherSeletores();
   } catch (e) {
     $("msg-montar").textContent = e.message;
     $("msg-montar").className = "msg erro";
