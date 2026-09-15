@@ -85,6 +85,9 @@ textarea { width: 100%; resize: vertical; min-height: 140px; }
 .atalhos-niveis { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .atalho-nivel { padding: 7px 10px; border-radius: 999px; color: var(--texto-suave); }
 .atalho-nivel.ativo { background: var(--acento); border-color: var(--acento); color: #fff; font-weight: 600; }
+.atalho-sexo { padding: 7px 14px; border-radius: 999px; color: var(--texto-suave); }
+.atalho-sexo.ativo { background: var(--acento); border-color: var(--acento); color: #fff; font-weight: 600; }
+.label-filtro-sexo { margin-top: 14px; }
 .botao-arquivo { display: inline-flex; align-items: center; cursor: pointer; }
 .botao-arquivo input { display: none; }
 .linha-acoes .secundario { white-space: nowrap; }

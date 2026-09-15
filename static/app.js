@@ -106,7 +106,7 @@ function renderParticipantes() {
     item.innerHTML = `
       <div>
         <div class="nome">${esc(p.nome)}</div>
-        <div class="det">${p.sexo || "Sexo não definido"} · ${p.nivel || "Nível não definido"} · ${p.ranking ? `${p.ranking}º` : "Ranking não definido"} · ${p.status}</div>
+        <div class="det">${p.sexo || "Sexo não definido"} · ${p.nivel || "Nível não definido"} · ${p.ranking ? `${p.ranking}º` : "Ranking não definido"}</div>
       </div>
       <div class="acoes">
         <input class="edicao-nome" data-nome="${p.id}" value="${esc(p.nome)}" maxlength="80" title="Nome" />
@@ -126,22 +126,10 @@ function renderParticipantes() {
           <option value="LF1" ${p.nivel === "LF1" ? "selected" : ""}>LF1</option>
         </select>
         <input class="edicao-ranking" data-ranking="${p.id}" type="number" min="1" placeholder="#" value="${p.ranking || ""}" title="Ranking no nível" />
-        <select data-status="${p.id}" title="Status">
-          <option value="ativo" ${p.status === "ativo" ? "selected" : ""}>Ativo</option>
-          <option value="inativo" ${p.status === "inativo" ? "selected" : ""}>Inativo</option>
-        </select>
-        <button class="remover" data-id="${p.id}" title="Remover">🗑️</button>
       </div>`;
     lista.appendChild(item);
   });
 
-  lista.querySelectorAll("[data-status]").forEach((sel) => {
-    sel.addEventListener("change", async () => {
-      const p = participantes.find((item) => item.id === sel.dataset.status);
-      if (p) { p.status = sel.value; p.atualizado_em = new Date().toISOString(); salvarParticipantesLocais(); }
-      await carregarParticipantes();
-    });
-  });
   lista.querySelectorAll("[data-nome]").forEach((input) => {
     input.addEventListener("change", () => editarParticipante(input.dataset.nome, { nome: input.value }));
   });
@@ -153,15 +141,6 @@ function renderParticipantes() {
   });
   lista.querySelectorAll("[data-ranking]").forEach((input) => {
     input.addEventListener("change", () => editarParticipante(input.dataset.ranking, { ranking: input.value }));
-  });
-
-  lista.querySelectorAll(".remover[data-id]").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      if (!confirm("Remover este participante?")) return;
-      participantes = participantes.filter((item) => item.id !== btn.dataset.id);
-      salvarParticipantesLocais();
-      await carregarParticipantes();
-    });
   });
 
   if (filtrosParticipantes.nivel) {
@@ -247,26 +226,6 @@ $("btn-adicionar").addEventListener("click", async () => {
   }
 });
 
-$("filtro-sexo").addEventListener("change", (event) => {
-  filtrosParticipantes.sexo = event.target.value;
-  renderParticipantes();
-});
-
-$("filtro-nivel").addEventListener("change", (event) => {
-  filtrosParticipantes.nivel = event.target.value;
-  document.querySelectorAll(".atalho-nivel").forEach((item) => item.classList.toggle("ativo", item.dataset.nivel === filtrosParticipantes.nivel));
-  renderParticipantes();
-});
-
-$("btn-limpar-filtros").addEventListener("click", () => {
-  filtrosParticipantes.sexo = "";
-  filtrosParticipantes.nivel = "";
-  $("filtro-sexo").value = "";
-  $("filtro-nivel").value = "";
-  document.querySelectorAll(".atalho-nivel").forEach((item) => item.classList.toggle("ativo", item.dataset.nivel === ""));
-  renderParticipantes();
-});
-
 $("btn-compartilhar").addEventListener("click", async () => {
   const mensagem = gerarMensagemParticipantes();
   if (!participantes.some((p) => p.status === "ativo")) {
@@ -289,8 +248,16 @@ $("btn-compartilhar").addEventListener("click", async () => {
 document.querySelectorAll(".atalho-nivel").forEach((botao) => {
   botao.addEventListener("click", () => {
     filtrosParticipantes.nivel = botao.dataset.nivel;
-    $("filtro-nivel").value = filtrosParticipantes.nivel;
     document.querySelectorAll(".atalho-nivel").forEach((item) => item.classList.remove("ativo"));
+    botao.classList.add("ativo");
+    renderParticipantes();
+  });
+});
+
+document.querySelectorAll(".atalho-sexo").forEach((botao) => {
+  botao.addEventListener("click", () => {
+    filtrosParticipantes.sexo = botao.dataset.sexo;
+    document.querySelectorAll(".atalho-sexo").forEach((item) => item.classList.remove("ativo"));
     botao.classList.add("ativo");
     renderParticipantes();
   });

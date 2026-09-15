@@ -78,7 +78,7 @@
         <p id="msg-sincronizar" class="msg">Os dados ficam salvos neste navegador.</p>
       </div>
       <div class="card acao filtros-participantes">
-        <label>Filtrar participantes</label>
+        <label>Filtrar por nível</label>
         <div id="atalhos-niveis" class="atalhos-niveis" aria-label="Filtrar por nível">
           <button type="button" class="atalho-nivel ativo" data-nivel="">Todos</button>
           <button type="button" class="atalho-nivel" data-nivel="C1">C1</button>
@@ -89,23 +89,11 @@
           <button type="button" class="atalho-nivel" data-nivel="LM1">LM1</button>
           <button type="button" class="atalho-nivel" data-nivel="LF1">LF1</button>
         </div>
-        <div class="linha">
-          <select id="filtro-sexo" title="Filtrar por sexo">
-            <option value="">Todos os sexos</option>
-            <option value="F">F</option>
-            <option value="M">M</option>
-          </select>
-          <select id="filtro-nivel" title="Filtrar por nível">
-            <option value="">Todos os níveis</option>
-            <option value="C1">C1</option>
-            <option value="M1">M1</option>
-            <option value="M2">M2</option>
-            <option value="F1">F1</option>
-            <option value="F2">F2</option>
-            <option value="LM1">LM1</option>
-            <option value="LF1">LF1</option>
-          </select>
-          <button id="btn-limpar-filtros" class="secundario">Limpar filtros</button>
+        <label class="label-filtro-sexo">Filtrar por sexo</label>
+        <div id="atalhos-sexos" class="atalhos-niveis" aria-label="Filtrar por sexo">
+          <button type="button" class="atalho-sexo ativo" data-sexo="">Todos</button>
+          <button type="button" class="atalho-sexo" data-sexo="F">F</button>
+          <button type="button" class="atalho-sexo" data-sexo="M">M</button>
         </div>
         <p id="contador-filtros" class="msg"></p>
       </div>
