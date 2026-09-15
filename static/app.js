@@ -144,17 +144,46 @@ function renderParticipantes() {
   });
 
   if (filtrosParticipantes.nivel) {
+    let marcadorArraste = null;
     lista.querySelectorAll(".participante-item[draggable='true']").forEach((item) => {
-      item.addEventListener("dragstart", () => item.classList.add("arrastando"));
-      item.addEventListener("dragend", () => item.classList.remove("arrastando"));
-      item.addEventListener("dragover", (event) => event.preventDefault());
+      item.addEventListener("dragstart", (event) => {
+        item.classList.add("arrastando");
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", item.dataset.participanteId);
+      });
+      item.addEventListener("dragend", () => {
+        item.classList.remove("arrastando");
+        marcadorArraste?.remove();
+        marcadorArraste = null;
+        lista.querySelectorAll(".alvo-arraste").forEach((alvo) => alvo.classList.remove("alvo-arraste"));
+      });
+      item.addEventListener("dragover", (event) => {
+        event.preventDefault();
+        const origem = lista.querySelector(".arrastando");
+        if (!origem || origem === item) return;
+        const rect = item.getBoundingClientRect();
+        const depois = event.clientY > rect.top + rect.height / 2;
+        if (!marcadorArraste) {
+          marcadorArraste = document.createElement("div");
+          marcadorArraste.className = "marcador-arraste";
+          marcadorArraste.textContent = depois ? "Soltar abaixo" : "Soltar acima";
+        }
+        marcadorArraste.textContent = depois ? "Soltar abaixo" : "Soltar acima";
+        item.classList.add("alvo-arraste");
+        if (depois) item.after(marcadorArraste);
+        else item.before(marcadorArraste);
+      });
       item.addEventListener("drop", (event) => {
         event.preventDefault();
         const origem = lista.querySelector(".arrastando");
         if (!origem || origem === item) return;
         const rect = item.getBoundingClientRect();
         const depois = event.clientY > rect.top + rect.height / 2;
-        lista.insertBefore(origem, depois ? item.nextSibling : item);
+        if (depois) item.after(origem);
+        else item.before(origem);
+        marcadorArraste?.remove();
+        marcadorArraste = null;
+        item.classList.remove("alvo-arraste");
         salvarRankingDoNivel();
       });
     });
