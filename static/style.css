@@ -87,6 +87,7 @@ textarea { width: 100%; resize: vertical; min-height: 140px; }
 .atalho-nivel.ativo { background: var(--acento); border-color: var(--acento); color: #fff; font-weight: 600; }
 .botao-arquivo { display: inline-flex; align-items: center; cursor: pointer; }
 .botao-arquivo input { display: none; }
+.linha-acoes .secundario { white-space: nowrap; }
 
 input, select, button {
   font: inherit;

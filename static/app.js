@@ -197,6 +197,29 @@ function salvarRankingDoNivel() {
   renderParticipantes();
 }
 
+function gerarMensagemParticipantes() {
+  const ordemNiveis = ["C1", "M1", "M2", "F1", "F2", "LM1", "LF1"];
+  const ativos = participantes.filter((p) => p.status === "ativo");
+  const grupos = ordemNiveis.map((nivel) => ({
+    nivel,
+    atletas: ativos
+      .filter((p) => p.nivel === nivel)
+      .sort((a, b) => (a.ranking || Number.MAX_SAFE_INTEGER) - (b.ranking || Number.MAX_SAFE_INTEGER)),
+  })).filter((grupo) => grupo.atletas.length);
+  const semNivel = ativos
+    .filter((p) => !p.nivel)
+    .sort((a, b) => (a.ranking || Number.MAX_SAFE_INTEGER) - (b.ranking || Number.MAX_SAFE_INTEGER));
+
+  const secoes = grupos.map((grupo) => [
+    `*${grupo.nivel}*`,
+    ...grupo.atletas.map((p, index) => `${index + 1}. ${p.nome}`),
+  ].join("\n"));
+  if (semNivel.length) {
+    secoes.push(["*Sem nível definido*", ...semNivel.map((p, index) => `${index + 1}. ${p.nome}`)].join("\n"));
+  }
+  return ["*Lista de participantes - Vôlei Djalma*", ...secoes].join("\n\n");
+}
+
 async function editarParticipante(id, alteracoes) {
   try {
     const p = participantes.find((item) => item.id === id);
@@ -242,6 +265,25 @@ $("btn-limpar-filtros").addEventListener("click", () => {
   $("filtro-nivel").value = "";
   document.querySelectorAll(".atalho-nivel").forEach((item) => item.classList.toggle("ativo", item.dataset.nivel === ""));
   renderParticipantes();
+});
+
+$("btn-compartilhar").addEventListener("click", async () => {
+  const mensagem = gerarMensagemParticipantes();
+  if (!participantes.some((p) => p.status === "ativo")) {
+    alert("Não há participantes ativos para compartilhar.");
+    return;
+  }
+
+  try {
+    if (navigator.share) {
+      await navigator.share({ text: mensagem });
+      return;
+    }
+    await navigator.clipboard.writeText(mensagem);
+  } catch {
+    // A abertura do WhatsApp continua disponível mesmo sem clipboard/share.
+  }
+  window.open(`https://wa.me/?text=${encodeURIComponent(mensagem)}`, "_blank");
 });
 
 document.querySelectorAll(".atalho-nivel").forEach((botao) => {
