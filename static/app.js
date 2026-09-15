@@ -487,20 +487,6 @@ async function atualizarDados() {
     }
   });
 
-  $("btn-sincronizar").addEventListener("click", async () => {
-    try {
-      $("btn-sincronizar").disabled = true;
-      $("msg-sincronizar").textContent = "Sincronizando...";
-      const r = await api.enviar("/api/participantes/sincronizar", "POST", { participantes });
-      $("msg-sincronizar").textContent = `${r.sincronizados} participantes enviados para a planilha.`;
-    } catch (e) {
-      $("msg-sincronizar").textContent = `Falha na sincronização: ${e.message}`;
-      $("msg-sincronizar").className = "msg erro";
-    } finally {
-      $("btn-sincronizar").disabled = false;
-    }
-  });
-
   $("btn-exportar").addEventListener("click", () => {
     const blob = new Blob([JSON.stringify({ participantes }, null, 2)], { type: "application/json" });
     const link = document.createElement("a");

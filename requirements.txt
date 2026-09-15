@@ -3,9 +3,6 @@
 
 fastapi>=0.110
 uvicorn[standard]>=0.29
-gspread>=6.0
-google-auth>=2.28
-python-dotenv>=1.0
 
 # Testes
 pytest>=8.0

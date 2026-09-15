@@ -2,8 +2,7 @@
 
 Implementa cadastro/edição de participantes, organização automática de
 times (balanceamento por nível com *snake draft*) e gestão de partidas e
-placar. Tudo opera sobre o contrato `Repositorio` (independente de onde
-os dados estão persistidos — memória nos testes, Google Sheets em produção).
+placar. Tudo opera sobre o contrato `Repositorio` em memória.
 """
 from __future__ import annotations
 

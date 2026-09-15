@@ -1,9 +1,4 @@
-"""Contratos e implementação em memória do repositório.
-
-Separa a lógica de negócio/sincronização do meio de persistência.
-`Repositorio` é o contrato; `RepositorioMemoria` é usado em testes e
-como fallback quando não há credenciais (APP_ENV=test).
-"""
+"""Contrato e implementação em memória do repositório."""
 from __future__ import annotations
 
 import threading
@@ -65,13 +60,5 @@ class RepositorioMemoria(Repositorio[T]):
 
 
 def criar_repositorios(em_memoria: bool) -> dict[str, Repositorio]:
-    """Cria um repositório para cada aba do sistema.
-
-    Em `em_memoria=True` (testes) usamos memória; em produção o chamador
-    substitui pelas implementações que conectam ao Google Sheets.
-    """
-    if not em_memoria:
-        raise NotImplementedError(
-            "Produção exige a implementação gspread (app.sheets_repo)."
-        )
+    """Cria repositórios em memória para cada aba do sistema."""
     return {nome: RepositorioMemoria() for nome in models.ABAS}

@@ -1,11 +1,6 @@
-"""Aplicação FastAPI: API JSON + servir o frontend estático.
-
-Modelo serverless: a planilha do Google Sheets é a fonte única de dados.
-Cada requisição lê/escreve diretamente na planilha (sem estado local).
-"""
+"""Aplicação FastAPI: API JSON + frontend estático."""
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -18,14 +13,7 @@ BASE = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE / "static"
 
 
-@asynccontextmanager
-async def lifespan(_: FastAPI):
-    """Conecta ao Google Sheets (se credenciais estiverem configuradas)."""
-    runtime.ativar_sheets()
-    yield
-
-
-app = FastAPI(title="Torneio de Vôlei", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Torneio de Vôlei", version="0.1.0")
 
 
 def _resposta(fn):
@@ -89,22 +77,6 @@ def importar_participantes(payload: dict):
         return {"importados": len(criados), "nomes": [p.nome for p in criados]}
 
     return _resposta(importar)
-
-
-@app.post("/api/participantes/sincronizar")
-def sincronizar_participantes(payload: dict):
-    """Substitui a aba de participantes somente quando solicitado manualmente."""
-    def sincronizar():
-        participantes = payload.get("participantes", [])
-        if not isinstance(participantes, list):
-            raise ErroDeDominio("Participantes inválidos.")
-        runtime.servico_participantes.limpar_todos()
-        criados = [runtime.servico_participantes.criar(
-            item.get("nome", ""), item.get("nivel"), item.get("sexo", ""), item.get("ranking")
-        ) for item in participantes]
-        return {"sincronizados": len(criados)}
-
-    return _resposta(sincronizar)
 
 
 # -- Times ------------------------------------------------------------
