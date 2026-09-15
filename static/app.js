@@ -65,6 +65,7 @@ document.querySelectorAll(".aba").forEach((btn) => {
 // ---- Participantes ---------------------------------------------------
 let participantes = [];
 let participanteId = new Map();
+const filtrosParticipantes = { sexo: "", nivel: "" };
 
 async function carregarParticipantes() {
   const locais = lerParticipantesLocais();
@@ -85,11 +86,16 @@ async function carregarParticipantes() {
 function renderParticipantes() {
   const lista = $("lista-participantes");
   lista.innerHTML = "";
-  if (!participantes.length) {
+  const exibidos = participantes.filter((p) => (
+    (!filtrosParticipantes.sexo || p.sexo === filtrosParticipantes.sexo) &&
+    (!filtrosParticipantes.nivel || p.nivel === filtrosParticipantes.nivel)
+  ));
+  $("contador-filtros").textContent = `${exibidos.length} de ${participantes.length} participantes`;
+  if (!exibidos.length) {
     lista.innerHTML = '<div class="card">Nenhum participante ainda. Adicione acima.</div>';
     return;
   }
-  participantes.forEach((p) => {
+  exibidos.forEach((p) => {
     const item = document.createElement("div");
     item.className = "item";
     item.innerHTML = `
@@ -179,6 +185,24 @@ $("btn-adicionar").addEventListener("click", async () => {
   } catch (e) {
     alert(e.message);
   }
+});
+
+$("filtro-sexo").addEventListener("change", (event) => {
+  filtrosParticipantes.sexo = event.target.value;
+  renderParticipantes();
+});
+
+$("filtro-nivel").addEventListener("change", (event) => {
+  filtrosParticipantes.nivel = event.target.value;
+  renderParticipantes();
+});
+
+$("btn-limpar-filtros").addEventListener("click", () => {
+  filtrosParticipantes.sexo = "";
+  filtrosParticipantes.nivel = "";
+  $("filtro-sexo").value = "";
+  $("filtro-nivel").value = "";
+  renderParticipantes();
 });
 
 // ---- Times -----------------------------------------------------------

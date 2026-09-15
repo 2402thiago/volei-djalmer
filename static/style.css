@@ -80,6 +80,8 @@ body {
 .linha > * { min-width: 0; }
 textarea { width: 100%; resize: vertical; min-height: 140px; }
 .linha-acoes { flex-wrap: wrap; }
+.filtros-participantes .linha { flex-wrap: wrap; }
+.filtros-participantes select { flex: 1; min-width: 130px; }
 .botao-arquivo { display: inline-flex; align-items: center; cursor: pointer; }
 .botao-arquivo input { display: none; }
 
@@ -146,6 +148,7 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   #novo-nome { flex-basis: 100%; }
   #novo-sexo, #novo-nivel { flex: 1; }
   #btn-adicionar { width: 48px; }
+  .filtros-participantes .linha > * { width: 100%; flex-basis: 100%; }
   .lista .item { align-items: flex-start; gap: 8px; }
   .lista .item > div:first-child { width: 100%; }
   .lista .item { flex-direction: column; }
