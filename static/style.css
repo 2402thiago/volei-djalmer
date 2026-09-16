@@ -109,6 +109,7 @@ button.primario {
 button:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .msg { margin-top: 8px; font-size: 13px; color: var(--texto-suave); }
+.msg { white-space: pre-line; }
 .msg.erro { color: var(--perigo); }
 
 .grade {

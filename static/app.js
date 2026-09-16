@@ -336,19 +336,29 @@ function renderTimes() {
 
 function montarTimesLocais() {
   const ativos = participantes.filter((p) => p.status === "ativo");
-  if (ativos.length !== 24) throw new Error(`É necessário ter exatamente 24 atletas ativos. Atual: ${ativos.length}.`);
-  const pendencias = ativos.filter((p) => !p.nivel || !p.ranking);
-  if (pendencias.length) throw new Error(`Há atletas sem nível ou ranking: ${pendencias.map((p) => p.nome).join(", ")}.`);
   const niveis = ["C1", "M1", "M2", "F1", "F2", "LM1", "LF1"];
+  const problemas = [];
+  if (ativos.length !== 24) problemas.push(`- Atletas ativos: ${ativos.length}; são necessários 24.`);
+  const niveisInvalidos = ativos.filter((p) => p.nivel && !niveis.includes(p.nivel));
+  niveisInvalidos.forEach((p) => problemas.push(`- ${p.nome}: nível "${p.nivel}" inválido.`));
+  ativos.filter((p) => !p.nivel).forEach((p) => problemas.push(`- ${p.nome}: nível não definido.`));
+  ativos.filter((p) => !p.ranking).forEach((p) => problemas.push(`- ${p.nome}: ranking não definido.`));
+  if (problemas.length) throw new Error(`Não foi possível sortear os times.\n${problemas.join("\n")}`);
+
   const forcaNivel = { C1: 7, M1: 6, M2: 5, F1: 4, F2: 3, LM1: 2, LF1: 1 };
   const potes = niveis.map((nivel) => ativos.filter((p) => p.nivel === nivel).sort((a, b) => a.ranking - b.ranking));
   const faltantes = ["C1", "M1", "M2", "F1", "F2"].filter((nivel) => potes[niveis.indexOf(nivel)].length < 4);
-  if (faltantes.length) throw new Error(`Potes com menos de 4 atletas: ${faltantes.join(", ")}.`);
+  if (faltantes.length) throw new Error(`Não foi possível sortear os times.\nPotes com menos de 4 atletas: ${faltantes.join(", ")}.`);
   const novos = [0, 1, 2, 3].map((indice) => ({ id: novoId(), nome: `Time ${indice + 1}`, jogadores: [], nivel_medio: "0.00" }));
-  potes.forEach((pote) => pote.forEach((atleta, index) => {
-    novos[index % 4].jogadores.push(atleta);
-  }));
-  if (novos.some((time) => time.jogadores.length !== 6)) throw new Error("Não foi possível formar 4 times com 6 atletas.");
+  potes.forEach((pote) => {
+    const inicio = Math.floor(Math.random() * 4);
+    pote.forEach((atleta, index) => {
+      novos[(inicio + index) % 4].jogadores.push(atleta);
+    });
+  });
+  if (novos.some((time) => time.jogadores.length !== 6)) {
+    throw new Error(`Não foi possível sortear os times.\nDistribuição final: ${novos.map((time) => `${time.nome}: ${time.jogadores.length} atletas`).join(", ")}.`);
+  }
   novos.forEach((time) => {
     time.jogadores.sort((a, b) => forcaNivel[b.nivel] - forcaNivel[a.nivel] || a.ranking - b.ranking);
     time.nivel_medio = (time.jogadores.reduce((sum, p) => sum + forcaNivel[p.nivel], 0) / 6).toFixed(2);
