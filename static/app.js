@@ -375,6 +375,32 @@ function renderTimes() {
   });
 }
 
+function gerarMensagemTimes() {
+  const secoes = times.map((time) => [
+    `*${time.nome}* - Média ${time.nivel_medio}`,
+    ...time.jogadores.map((p, index) => `${index + 1}. ${p.nome} - ${p.nivel || "Nível não definido"}`),
+  ].join("\n"));
+  return ["*Times - Vôlei Djalmer*", ...secoes].join("\n\n");
+}
+
+$('btn-compartilhar-times').addEventListener("click", async () => {
+  if (!times.length) {
+    alert("Sorteie os times antes de compartilhar.");
+    return;
+  }
+  const mensagem = gerarMensagemTimes();
+  try {
+    if (navigator.share) {
+      await navigator.share({ text: mensagem });
+      return;
+    }
+    await navigator.clipboard.writeText(mensagem);
+  } catch {
+    // O WhatsApp continua disponível quando o compartilhamento nativo falha.
+  }
+  window.open(`https://wa.me/?text=${encodeURIComponent(mensagem)}`, "_blank");
+});
+
 function montarTimesLocais() {
   const ativos = participantes.filter((p) => p.status === "ativo");
   const niveis = ["C1", "M1", "M2", "F1", "F2", "LM1", "LF1"];
