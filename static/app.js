@@ -377,7 +377,7 @@ function renderTimes() {
 
 function gerarMensagemTimes() {
   const secoes = times.map((time) => [
-    `*${time.nome}* - Média ${time.nivel_medio}`,
+    `*${time.nome}*`,
     ...time.jogadores.map((p, index) => `${index + 1}. ${p.nome} - ${p.nivel || "Nível não definido"}`),
   ].join("\n"));
   return ["*Times - Vôlei Djalmer*", ...secoes].join("\n\n");
