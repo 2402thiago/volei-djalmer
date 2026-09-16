@@ -6,11 +6,9 @@ import pytest
 from app.models import Participante, Time
 from app.repo import RepositorioMemoria
 from app.services import (
-    ServicoPartidas,
     ServicoParticipantes,
     ServicoTimes,
     balancear_times,
-    classificacao,
 )
 
 
@@ -21,11 +19,6 @@ def repo_participantes():
 
 @pytest.fixture
 def repo_times():
-    return RepositorioMemoria()
-
-
-@pytest.fixture
-def repo_partidas():
     return RepositorioMemoria()
 
 
@@ -123,56 +116,3 @@ class TestServicoTimes:
         time, comp = st.composicao(times[0].id)
         assert p.id in [c.id for c in comp]
 
-
-class TestServicoPartidas:
-    def test_criar_e_pontuar(self, repo_partidas):
-        s = ServicoPartidas(repo_partidas)
-        partida = s.criar("t1", "t2")
-        s.pontuar(partida.id, "a", +1)
-        s.pontuar(partida.id, "b", +2)
-        atual = s.obter(partida.id)
-        assert atual.placar_a == 1
-        assert atual.placar_b == 2
-
-    def test_pontuar_nao_fica_negativo(self, repo_partidas):
-        s = ServicoPartidas(repo_partidas)
-        partida = s.criar("t1", "t2")
-        s.pontuar(partida.id, "a", -1)
-        assert s.obter(partida.id).placar_a == 0
-
-    def test_criar_time_contra_si_mesmo_falha(self, repo_partidas):
-        s = ServicoPartidas(repo_partidas)
-        with pytest.raises(Exception):
-            s.criar("t1", "t1")
-
-    def test_alterar_status(self, repo_partidas):
-        s = ServicoPartidas(repo_partidas)
-        partida = s.criar("t1", "t2")
-        s.alterar_status(partida.id, "concluida")
-        assert s.obter(partida.id).status_partida == "concluida"
-
-
-class TestClassificacao:
-    def test_pontuacao_por_vitoria(self):
-        partidas = [
-            _partida("p1", "t1", "t2", 25, 20, "concluida"),
-            _partida("p2", "t1", "t3", 25, 23, "concluida"),
-        ]
-        tabela = classificacao(partidas)
-        t1 = next(x for x in tabela if x["time_id"] == "t1")
-        assert t1["pontos"] == 6
-        assert t1["vitorias"] == 2
-
-    def test_ignora_partidas_nao_concluidas(self):
-        partidas = [
-            _partida("p1", "t1", "t2", 25, 20, "agendado"),
-        ]
-        assert classificacao(partidas) == []
-
-
-def _partida(id_, a, b, pa, pb, status):
-    from app.models import Partida
-    return Partida(
-        id=id_, time_a_id=a, time_b_id=b,
-        placar_a=pa, placar_b=pb, status_partida=status,
-    )

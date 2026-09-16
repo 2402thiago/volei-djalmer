@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 
 from .runtime import runtime
-from .services import ErroDeDominio, classificacao
+from .services import ErroDeDominio
 
 BASE = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE / "static"
@@ -108,38 +108,6 @@ def composicao_time(id_: str):
             {"id": p.id, "nome": p.nome, "nivel": p.nivel} for p in comp
         ],
     })(*runtime.servico_times.composicao(id_)))
-
-
-# -- Partidas ---------------------------------------------------------
-@app.get("/api/partidas")
-def listar_partidas(status: str | None = None):
-    return _resposta(lambda: [p.to_linha() for p in runtime.servico_partidas.listar(status)])
-
-
-@app.post("/api/partidas")
-def criar_partida(payload: dict):
-    return _resposta(lambda: runtime.servico_partidas.criar(
-        payload["time_a_id"], payload["time_b_id"]
-    ).to_linha())
-
-
-@app.patch("/api/partidas/{id_}/placar")
-def pontuar(id_: str, payload: dict):
-    return _resposta(lambda: runtime.servico_partidas.pontuar(
-        id_, payload["time"], payload.get("delta", 1)
-    ).to_linha())
-
-
-@app.patch("/api/partidas/{id_}/status")
-def alterar_status_partida(id_: str, payload: dict):
-    return _resposta(lambda: runtime.servico_partidas.alterar_status(
-        id_, payload.get("status", "em_andamento")
-    ).to_linha())
-
-
-@app.get("/api/classificacao")
-def obter_classificacao():
-    return _resposta(lambda: classificacao(runtime.servico_partidas.listar()))
 
 
 # -- Sincronização / saúde -------------------------------------------

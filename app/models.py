@@ -27,10 +27,6 @@ PARTICIPANTES_COLUNAS = [
 # `atualizado_em` no Time garante a resolução "última escrita vence"
 # na sincronização bidirecional (decisão da Fase 0).
 TIMES_COLUNAS = ["id", "nome", "jogadores", "nivel_medio", "atualizado_em"]
-PARTIDAS_COLUNAS = [
-    "id", "time_a_id", "time_b_id", "placar_a", "placar_b",
-    "status_partida", "atualizado_em",
-]
 
 
 @dataclass
@@ -105,45 +101,8 @@ class Time:
         )
 
 
-@dataclass
-class Partida:
-    """Uma partida entre dois times."""
-
-    time_a_id: str
-    time_b_id: str
-    status_partida: str = "agendado"
-    placar_a: int = 0
-    placar_b: int = 0
-    id: str = field(default_factory=novo_id)
-    atualizado_em: str = field(default_factory=agora_iso)
-
-    def to_linha(self) -> dict[str, str]:
-        return {
-            "id": self.id,
-            "time_a_id": self.time_a_id,
-            "time_b_id": self.time_b_id,
-            "placar_a": str(self.placar_a),
-            "placar_b": str(self.placar_b),
-            "status_partida": self.status_partida,
-            "atualizado_em": self.atualizado_em,
-        }
-
-    @classmethod
-    def de_linha(cls, linha: dict[str, str]) -> "Partida":
-        return cls(
-            id=linha["id"],
-            time_a_id=linha["time_a_id"],
-            time_b_id=linha["time_b_id"],
-            placar_a=int(linha.get("placar_a") or 0),
-            placar_b=int(linha.get("placar_b") or 0),
-            status_partida=linha.get("status_partida", "agendado"),
-            atualizado_em=linha.get("atualizado_em", ""),
-        )
-
-
 # Registro de abas e seus modelos, usado pela camada de sincronização.
 ABAS: dict[str, type] = {
     "Participantes": Participante,
     "Times": Time,
-    "Partidas": Partida,
 }

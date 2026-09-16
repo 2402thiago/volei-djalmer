@@ -16,8 +16,6 @@
   <nav class="abas">
     <button data-tela="dashboard" class="aba ativa">Times</button>
     <button data-tela="participantes" class="aba">Participantes</button>
-    <button data-tela="partida" class="aba">Partida</button>
-    <button data-tela="historico" class="aba">Histórico</button>
   </nav>
 
   <main>
@@ -97,42 +95,6 @@
       <div id="lista-participantes" class="lista"></div>
     </section>
 
-    <!-- Tela 3: Partida em andamento -->
-    <section id="partida" class="tela">
-      <div class="card acao">
-        <select id="partida-a"></select>
-        <span class="vs">vs</span>
-        <select id="partida-b"></select>
-        <button id="btn-nova-partida">Nova partida</button>
-      </div>
-      <div id="placar" class="placar">
-        <div class="time-placar">
-          <h2 id="nome-a">—</h2>
-          <div class="pontos">
-            <button data-time="a" data-delta="-1">−</button>
-            <span id="pontos-a">0</span>
-            <button data-time="a" data-delta="1">+</button>
-          </div>
-        </div>
-        <div class="time-placar">
-          <h2 id="nome-b">—</h2>
-          <div class="pontos">
-            <button data-time="b" data-delta="-1">−</button>
-            <span id="pontos-b">0</span>
-            <button data-time="b" data-delta="1">+</button>
-          </div>
-        </div>
-      </div>
-      <button id="btn-concluir" class="primario" disabled>Concluir partida</button>
-    </section>
-
-    <!-- Tela 4: Histórico / Placar -->
-    <section id="historico" class="tela">
-      <h2 class="titulo-secao">Classificação</h2>
-      <div id="classificacao" class="lista"></div>
-      <h2 class="titulo-secao">Partidas</h2>
-      <div id="lista-partidas" class="lista"></div>
-    </section>
   </main>
 
   <script src="app.js"></script>

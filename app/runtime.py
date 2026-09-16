@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from .repo import Repositorio, criar_repositorios
-from .services import ServicoPartidas, ServicoParticipantes, ServicoTimes
+from .services import ServicoParticipantes, ServicoTimes
 
 
 class Runtime:
@@ -12,7 +12,6 @@ class Runtime:
         self.repositorios: dict[str, Repositorio] = {}
         self.servico_participantes: ServicoParticipantes | None = None
         self.servico_times: ServicoTimes | None = None
-        self.servico_partidas: ServicoPartidas | None = None
         self.modo = "memoria"
         self.reiniciar()
 
@@ -23,7 +22,6 @@ class Runtime:
         self.servico_times = ServicoTimes(
             repos["Times"], repos["Participantes"]
         )
-        self.servico_partidas = ServicoPartidas(repos["Partidas"])
 
     def reiniciar(self) -> None:
         """Volta para repositórios em memória (usado em testes)."""

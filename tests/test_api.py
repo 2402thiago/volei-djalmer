@@ -30,16 +30,6 @@ def test_fluxo_completo(client):
     assert len(times) == 2
     assert all(t["jogadores"] for t in times)
 
-    # partida + placar + conclusão
-    p = client.post("/api/partidas", json={"time_a_id": times[0]["id"], "time_b_id": times[1]["id"]}).json()
-    pid = p["id"]
-    client.patch(f"/api/partidas/{pid}/placar", json={"time": "a", "delta": 1})
-    client.patch(f"/api/partidas/{pid}/placar", json={"time": "a", "delta": 1})
-    client.patch(f"/api/partidas/{pid}/status", json={"status": "concluida"})
-
-    assert int(client.get("/api/partidas").json()[0]["placar_a"]) == 2
-    classificacao = client.get("/api/classificacao").json()
-    assert classificacao[0]["time_id"] == times[0]["id"]
 
 
 def test_validacao_nome_vazio(client):

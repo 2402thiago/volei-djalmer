@@ -1,22 +1,19 @@
 """Regras de negócio do torneio de vôlei.
 
 Implementa cadastro/edição de participantes, organização automática de
-times (balanceamento por nível com *snake draft*) e gestão de partidas e
-placar. Tudo opera sobre o contrato `Repositorio` em memória.
+times (balanceamento por nível com *snake draft*). Tudo opera sobre o contrato
+`Repositorio` em memória.
 """
 from __future__ import annotations
 
-from collections import defaultdict
-
 from . import models
-from .models import Partida, Participante, Time
+from .models import Participante, Time
 from .repo import Repositorio
 
 NIVEIS = ("C1", "M1", "M2", "F1", "F2", "LM1", "LF1")
 ORDEM_NIVEIS = {nivel: len(NIVEIS) - indice for indice, nivel in enumerate(NIVEIS)}
 STATUS_VALIDOS = ("ativo", "inativo")
 SEXOS_VALIDOS = ("", "F", "M")
-STATUS_PARTIDA_VALIDOS = ("agendado", "em_andamento", "concluida")
 
 
 class ErroDeDominio(ValueError):
@@ -234,91 +231,3 @@ class ServicoTimes:
         return time, participantes
 
 
-# ---------------------------------------------------------------------------
-# Partidas
-# ---------------------------------------------------------------------------
-
-class ServicoPartidas:
-    """Registro de partidas e atualização do placar."""
-
-    def __init__(self, repo: Repositorio[Partida]) -> None:
-        self.repo = repo
-
-    def criar(self, time_a_id: str, time_b_id: str) -> Partida:
-        if time_a_id == time_b_id:
-            raise ErroDeDominio("Um time não pode jogar contra si mesmo.")
-        partida = Partida(time_a_id=time_a_id, time_b_id=time_b_id)
-        return self.repo.salvar(partida)
-
-    def listar(self, status: str | None = None) -> list[Partida]:
-        todas = self.repo.obter_todos()
-        if status:
-            todas = [p for p in todas if p.status_partida == status]
-        return sorted(todas, key=lambda p: p.atualizado_em, reverse=True)
-
-    def obter(self, id_: str) -> Partida:
-        p = self.repo.obter(id_)
-        if p is None:
-            raise ErroDeDominio(f"Partida não encontrada: {id_}.")
-        return p
-
-    def _registrar(self, partida: Partida) -> Partida:
-        partida.atualizado_em = models.agora_iso()
-        return self.repo.salvar(partida)
-
-    def alterar_status(self, id_: str, status: str) -> Partida:
-        if status not in STATUS_PARTIDA_VALIDOS:
-            raise ErroDeDominio(f"Status de partida inválido: {status!r}.")
-        partida = self.obter(id_)
-        partida.status_partida = status
-        return self._registrar(partida)
-
-    def pontuar(self, id_: str, time: str, delta: int) -> Partida:
-        """Incrementa o placar de um time (delta = +1 ou -1).
-
-        `time` deve ser "a" ou "b". O placar nunca fica negativo.
-        """
-        if time not in ("a", "b"):
-            raise ErroDeDominio("Time do placar deve ser 'a' ou 'b'.")
-        partida = self.obter(id_)
-        campo = "placar_a" if time == "a" else "placar_b"
-        novo = getattr(partida, campo) + int(delta)
-        if novo < 0:
-            novo = 0
-        setattr(partida, campo, novo)
-        return self._registrar(partida)
-
-
-def classificacao(partidas: list[Partida]) -> list[dict[str, float | str]]:
-    """Calcula a classificação geral por time a partir das partidas concluídas."""
-    pontos: dict[str, int] = defaultdict(int)
-    vitorias: dict[str, int] = defaultdict(int)
-    sets_favor: dict[str, int] = defaultdict(int)
-    sets_contra: dict[str, int] = defaultdict(int)
-
-    for p in partidas:
-        if p.status_partida != "concluida":
-            continue
-        if p.placar_a == p.placar_b:
-            continue  # empate não atribui pontos nesta regra simples
-        vencedor, perdedor = (p.time_a_id, p.time_b_id) if p.placar_a > p.placar_b else (p.time_b_id, p.time_a_id)
-        vitorias[vencedor] += 1
-        pontos[vencedor] += 3
-        sets_favor[vencedor] += p.placar_a if vencedor == p.time_a_id else p.placar_b
-        sets_contra[vencedor] += p.placar_b if vencedor == p.time_a_id else p.placar_a
-        sets_favor[perdedor] += p.placar_b if vencedor == p.time_a_id else p.placar_a
-        sets_contra[perdedor] += p.placar_a if vencedor == p.time_a_id else p.placar_b
-
-    ids = set(pontos) | set(vitorias) | set(sets_favor)
-    tabela = [
-        {
-            "time_id": t,
-            "pontos": pontos[t],
-            "vitorias": vitorias[t],
-            "sets_favor": sets_favor[t],
-            "sets_contra": sets_contra[t],
-        }
-        for t in ids
-    ]
-    tabela.sort(key=lambda x: (-x["pontos"], -x["vitorias"], x["time_id"]))
-    return tabela
