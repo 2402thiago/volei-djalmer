@@ -98,7 +98,6 @@ input, select, button {
   background: #fff;
 }
 input[type="number"] { width: 70px; }
-#novo-nome { flex: 1; }
 button { cursor: pointer; }
 button.primario {
   background: var(--acento);
@@ -179,9 +178,6 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 
 @media (max-width: 520px) {
   .linha:not(.linha-acoes) { flex-wrap: wrap; }
-  #novo-nome { flex-basis: 100%; }
-  #novo-sexo, #novo-nivel { flex: 1; }
-  #btn-adicionar { width: 48px; }
   .filtros-participantes .linha > * { width: 100%; flex-basis: 100%; }
   .lista .item { align-items: flex-start; gap: 8px; }
   .lista .item > div:first-child { width: 100%; }

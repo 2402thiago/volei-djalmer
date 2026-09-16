@@ -276,21 +276,6 @@ function normalizarRankings(nivel) {
     .forEach((p, index) => { p.ranking = index + 1; });
 }
 
-$("btn-adicionar").addEventListener("click", async () => {
-  const nome = $("novo-nome").value.trim();
-  const sexo = $("novo-sexo").value;
-  const nivel = $("novo-nivel").value || null;
-  if (!nome) return;
-  try {
-    participantes.push({ id: novoId(), nome, sexo, nivel, ranking: null, status: "ativo", criado_em: new Date().toISOString(), atualizado_em: new Date().toISOString() });
-    salvarParticipantesLocais();
-    $("novo-nome").value = "";
-    await Promise.all([carregarParticipantes(), carregarTimes()]);
-  } catch (e) {
-    alert(e.message);
-  }
-});
-
 $("btn-compartilhar").addEventListener("click", async () => {
   const mensagem = gerarMensagemParticipantes();
   if (!participantes.some((p) => p.status === "ativo")) {
