@@ -68,4 +68,4 @@ def test_montar_sem_participantes(client):
 def test_servir_index(client):
     r = client.get("/")
     assert r.status_code == 200
-    assert "Torneio de Vôlei" in r.text
+    assert "Vôlei Djalmer" in r.text

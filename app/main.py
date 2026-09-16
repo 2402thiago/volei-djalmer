@@ -13,7 +13,7 @@ BASE = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE / "static"
 
 
-app = FastAPI(title="Torneio de Vôlei", version="0.1.0")
+app = FastAPI(title="Vôlei Djalmer", version="0.1.0")
 
 
 def _resposta(fn):

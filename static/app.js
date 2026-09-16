@@ -232,12 +232,23 @@ async function editarParticipante(id, alteracoes) {
   try {
     const p = participantes.find((item) => item.id === id);
     if (!p) return;
+    const nivelAnterior = p.nivel;
     Object.assign(p, alteracoes, { atualizado_em: new Date().toISOString() });
+    normalizarRankings(nivelAnterior);
+    normalizarRankings(p.nivel);
     salvarParticipantesLocais();
     await carregarParticipantes();
   } catch (e) {
     alert(e.message);
   }
+}
+
+function normalizarRankings(nivel) {
+  if (!nivel) return;
+  participantes
+    .filter((p) => p.nivel === nivel)
+    .sort((a, b) => (a.ranking || Number.MAX_SAFE_INTEGER) - (b.ranking || Number.MAX_SAFE_INTEGER) || a.nome.localeCompare(b.nome))
+    .forEach((p, index) => { p.ranking = index + 1; });
 }
 
 $("btn-adicionar").addEventListener("click", async () => {
@@ -329,17 +340,19 @@ function montarTimesLocais() {
   const pendencias = ativos.filter((p) => !p.nivel || !p.ranking);
   if (pendencias.length) throw new Error(`Há atletas sem nível ou ranking: ${pendencias.map((p) => p.nome).join(", ")}.`);
   const niveis = ["C1", "M1", "M2", "F1", "F2", "LM1", "LF1"];
+  const forcaNivel = { C1: 7, M1: 6, M2: 5, F1: 4, F2: 3, LM1: 2, LF1: 1 };
   const potes = niveis.map((nivel) => ativos.filter((p) => p.nivel === nivel).sort((a, b) => a.ranking - b.ranking));
   const faltantes = ["C1", "M1", "M2", "F1", "F2"].filter((nivel) => potes[niveis.indexOf(nivel)].length < 4);
   if (faltantes.length) throw new Error(`Potes com menos de 4 atletas: ${faltantes.join(", ")}.`);
   const novos = [0, 1, 2, 3].map((indice) => ({ id: novoId(), nome: `Time ${indice + 1}`, jogadores: [], nivel_medio: "0.00" }));
-  potes.forEach((pote) => pote.forEach((atleta) => {
-    const menor = Math.min(...novos.map((time) => time.jogadores.length));
-    const candidatos = novos.filter((time) => time.jogadores.length === menor);
-    candidatos.sort((a, b) => a.jogadores.filter((p) => p.sexo === atleta.sexo).length - b.jogadores.filter((p) => p.sexo === atleta.sexo).length);
-    candidatos[0].jogadores.push(atleta);
+  potes.forEach((pote) => pote.forEach((atleta, index) => {
+    novos[index % 4].jogadores.push(atleta);
   }));
   if (novos.some((time) => time.jogadores.length !== 6)) throw new Error("Não foi possível formar 4 times com 6 atletas.");
+  novos.forEach((time) => {
+    time.jogadores.sort((a, b) => forcaNivel[b.nivel] - forcaNivel[a.nivel] || a.ranking - b.ranking);
+    time.nivel_medio = (time.jogadores.reduce((sum, p) => sum + forcaNivel[p.nivel], 0) / 6).toFixed(2);
+  });
   return novos;
 }
 
