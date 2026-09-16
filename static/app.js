@@ -86,6 +86,7 @@ async function carregarParticipantes() {
 function renderParticipantes() {
   const lista = $("lista-participantes");
   lista.innerHTML = "";
+  renderResumoParticipantes();
   const exibidos = participantes.filter((p) => (
     (!filtrosParticipantes.sexo || p.sexo === filtrosParticipantes.sexo) &&
     (!filtrosParticipantes.nivel || p.nivel === filtrosParticipantes.nivel)
@@ -188,6 +189,30 @@ function renderParticipantes() {
       });
     });
   }
+}
+
+function renderResumoParticipantes() {
+  const resumo = $("resumo-niveis");
+  if (!resumo) return;
+  const niveis = ["C1", "M1", "M2", "F1", "F2", "LM1", "LF1"];
+  const ativos = participantes.filter((p) => p.status === "ativo");
+  const linhas = [...niveis, "Sem nível"];
+  const contar = (nivel, sexo) => ativos.filter((p) =>
+    (nivel === "__total__" || (nivel === "Sem nível" ? !p.nivel : p.nivel === nivel)) && p.sexo === sexo
+  ).length;
+  const contarSemGenero = (nivel) => ativos.filter((p) =>
+    (nivel === "Sem nível" ? !p.nivel : p.nivel === nivel) && !p.sexo
+  ).length;
+  const celulas = linhas.map((nivel) => {
+    const feminino = contar(nivel, "F");
+    const masculino = contar(nivel, "M");
+    const semGenero = contarSemGenero(nivel);
+    return `<tr><th scope="row">${nivel}</th><td>${feminino}</td><td>${masculino}</td><td>${semGenero}</td><td>${feminino + masculino + semGenero}</td></tr>`;
+  }).join("");
+  const totalF = contar("__total__", "F");
+  const totalM = contar("__total__", "M");
+  const totalSemGenero = ativos.filter((p) => !p.sexo).length;
+  resumo.innerHTML = `<table><thead><tr><th>Nível</th><th>F</th><th>M</th><th>Não informado</th><th>Total</th></tr></thead><tbody>${celulas}</tbody><tfoot><tr><th>Total</th><th>${totalF}</th><th>${totalM}</th><th>${totalSemGenero}</th><th>${ativos.length}</th></tr></tfoot></table>`;
 }
 
 function salvarRankingDoNivel() {

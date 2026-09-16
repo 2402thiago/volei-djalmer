@@ -110,6 +110,13 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .msg { margin-top: 8px; font-size: 13px; color: var(--texto-suave); }
 .msg { white-space: pre-line; }
+.resumo-participantes h2 { font-size: 16px; margin-bottom: 10px; }
+.tabela-resumo { overflow-x: auto; }
+.tabela-resumo table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tabela-resumo th, .tabela-resumo td { padding: 8px 10px; border-bottom: 1px solid var(--borda); text-align: center; }
+.tabela-resumo th:first-child, .tabela-resumo td:first-child { text-align: left; }
+.tabela-resumo thead th { color: var(--texto-suave); font-weight: 600; }
+.tabela-resumo tfoot th, .tabela-resumo tfoot td { border-bottom: 0; font-weight: 700; }
 .msg.erro { color: var(--perigo); }
 
 .grade {
