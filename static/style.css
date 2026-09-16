@@ -161,6 +161,7 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   border-color: var(--acento);
   box-shadow: 0 0 0 2px var(--acento-suave), 0 4px 12px rgba(76, 110, 245, 0.18);
 }
+.perigo { background: #fff1f1; border-color: #e4a4a4; color: var(--perigo); }
 .marcador-arraste {
   min-height: 34px;
   margin: 4px 0;

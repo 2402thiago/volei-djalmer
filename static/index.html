@@ -22,11 +22,7 @@
     <!-- Tela 1: Dashboard / Times -->
     <section id="dashboard" class="tela ativa">
       <div class="card acao">
-        <label for="num-times">Montar times balanceados (por nível)</label>
-        <div class="linha">
-          <input type="number" id="num-times" min="4" max="4" value="4" disabled />
-          <button id="btn-montar" class="primario">Sortear novamente</button>
-        </div>
+        <button id="btn-montar" class="primario">Sortear times</button>
         <p id="msg-montar" class="msg"></p>
       </div>
       <div id="lista-times" class="grade"></div>
@@ -71,6 +67,11 @@
           <button id="btn-compartilhar" class="secundario">Compartilhar lista</button>
         </div>
         <p class="msg">A lista é mantida localmente neste navegador.</p>
+      </div>
+      <div class="card acao dados-locais">
+        <label>Dados do site</label>
+        <button id="btn-limpar-dados" class="perigo">Limpar todos os dados</button>
+        <p id="msg-limpar-dados" class="msg"></p>
       </div>
       <div class="card resumo-participantes">
         <h2>Quantidade de atletas</h2>

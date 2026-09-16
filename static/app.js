@@ -333,6 +333,22 @@ let times = [];
 const STORAGE_TIMES = "volei.times.v1";
 function salvarTimesLocais() { localStorage.setItem(STORAGE_TIMES, JSON.stringify(times)); }
 
+$("btn-limpar-dados").addEventListener("click", () => {
+  if (!confirm("Tem certeza que deseja apagar todos os participantes e times? Essa ação não pode ser desfeita.")) return;
+  localStorage.removeItem(STORAGE_PARTICIPANTES);
+  localStorage.removeItem(STORAGE_TIMES);
+  participantes = [];
+  participanteId = new Map();
+  times = [];
+  filtrosParticipantes.sexo = "";
+  filtrosParticipantes.nivel = "";
+  renderParticipantes();
+  renderTimes();
+  document.querySelectorAll(".atalho-nivel").forEach((item) => item.classList.toggle("ativo", item.dataset.nivel === ""));
+  document.querySelectorAll(".atalho-sexo").forEach((item) => item.classList.toggle("ativo", item.dataset.sexo === ""));
+  $("msg-limpar-dados").textContent = "Todos os dados foram apagados.";
+});
+
 async function carregarTimes() {
   try { times = JSON.parse(localStorage.getItem(STORAGE_TIMES) || "[]"); } catch { times = []; }
   renderTimes();
