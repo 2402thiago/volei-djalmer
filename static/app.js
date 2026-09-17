@@ -365,7 +365,79 @@ document.querySelectorAll(".atalho-sexo").forEach((botao) => {
 // ---- Times -----------------------------------------------------------
 let times = [];
 const STORAGE_TIMES = "volei.times.v1";
+const STORAGE_PRESENCA = "volei.presenca.v1";
+let presenca = { assinatura: "", atletas: {}, ordem: [] };
 function salvarTimesLocais() { localStorage.setItem(STORAGE_TIMES, JSON.stringify(times)); }
+
+function assinaturaTimes() {
+  return times.map((time) => `${time.id}:${time.jogadores.map((p) => p.id).sort().join(",")}`).join("|");
+}
+
+function salvarPresenca() { localStorage.setItem(STORAGE_PRESENCA, JSON.stringify(presenca)); }
+
+function reiniciarPresenca() {
+  presenca = { assinatura: assinaturaTimes(), atletas: {}, ordem: [] };
+  salvarPresenca();
+  renderPresenca();
+}
+
+function carregarPresenca() {
+  try { presenca = JSON.parse(localStorage.getItem(STORAGE_PRESENCA) || "null") || {}; } catch { presenca = {}; }
+  if (presenca.assinatura !== assinaturaTimes() || !presenca.atletas || !Array.isArray(presenca.ordem)) {
+    presenca = { assinatura: assinaturaTimes(), atletas: {}, ordem: [] };
+    salvarPresenca();
+  }
+  atualizarOrdemPresenca();
+  renderPresenca();
+}
+
+function timeCompleto(time) {
+  return time.jogadores.every((p) => presenca.atletas[p.id]);
+}
+
+function atualizarOrdemPresenca() {
+  const completos = new Set(times.filter(timeCompleto).map((time) => time.id));
+  presenca.ordem = presenca.ordem.filter((id) => completos.has(id));
+  times.filter(timeCompleto).forEach((time) => {
+    if (!presenca.ordem.includes(time.id)) presenca.ordem.push(time.id);
+  });
+}
+
+function renderPresenca() {
+  const lista = $("lista-presenca");
+  if (!lista) return;
+  lista.innerHTML = "";
+  if (!times.length) {
+    lista.innerHTML = '<div class="card">Sorteie os times antes de confirmar a presença.</div>';
+    return;
+  }
+  times.forEach((time) => {
+    const presentes = time.jogadores.filter((p) => presenca.atletas[p.id]).length;
+    const posicao = presenca.ordem.indexOf(time.id);
+    const card = document.createElement("div");
+    card.className = "card card-presenca";
+    card.innerHTML = `<h3>${esc(time.nome)}</h3><p class="status-presenca">${presentes} de ${time.jogadores.length} presentes</p>${posicao >= 0 ? `<span class="ordem-quadra">TIME ${posicao + 1} EM QUADRA</span>` : ""}<div class="atletas-presenca"></div>`;
+    const atletas = card.querySelector(".atletas-presenca");
+    time.jogadores.forEach((p) => {
+      const botao = document.createElement("button");
+      const presente = Boolean(presenca.atletas[p.id]);
+      botao.className = `atleta-presenca${presente ? " presente" : ""}`;
+      botao.dataset.atleta = p.id;
+      botao.textContent = `${presente ? "Presente: " : "Confirmar: "}${p.nome}`;
+      atletas.appendChild(botao);
+    });
+    lista.appendChild(card);
+  });
+  lista.querySelectorAll("[data-atleta]").forEach((botao) => {
+    botao.addEventListener("click", () => {
+      const id = botao.dataset.atleta;
+      presenca.atletas[id] = !presenca.atletas[id];
+      atualizarOrdemPresenca();
+      salvarPresenca();
+      renderPresenca();
+    });
+  });
+}
 
 $("btn-limpar-dados").addEventListener("click", () => {
   if (!confirm("Tem certeza que deseja apagar todos os participantes e times? Essa ação não pode ser desfeita.")) return;
@@ -373,9 +445,11 @@ $("btn-limpar-dados").addEventListener("click", () => {
   localStorage.removeItem(STORAGE_TIMES);
   localStorage.removeItem(STORAGE_CASAIS);
   localStorage.removeItem(STORAGE_CASAIS_ATIVOS);
+  localStorage.removeItem(STORAGE_PRESENCA);
   participantes = [];
   participanteId = new Map();
   times = [];
+  presenca = { assinatura: "", atletas: {}, ordem: [] };
   sorteioComCasais = false;
   casaisAtivos = casaisConfigurados.map(() => true);
   atualizarBotaoCasais();
@@ -383,6 +457,7 @@ $("btn-limpar-dados").addEventListener("click", () => {
   filtrosParticipantes.nivel = "";
   renderParticipantes();
   renderTimes();
+  renderPresenca();
   document.querySelectorAll(".atalho-nivel").forEach((item) => item.classList.toggle("ativo", item.dataset.nivel === ""));
   document.querySelectorAll(".atalho-sexo").forEach((item) => item.classList.toggle("ativo", item.dataset.sexo === ""));
   $("msg-limpar-dados").textContent = "Todos os dados foram apagados.";
@@ -391,6 +466,7 @@ $("btn-limpar-dados").addEventListener("click", () => {
 async function carregarTimes() {
   try { times = JSON.parse(localStorage.getItem(STORAGE_TIMES) || "[]"); } catch { times = []; }
   renderTimes();
+  carregarPresenca();
 }
 
 function renderTimes() {
@@ -561,6 +637,7 @@ $("btn-montar").addEventListener("click", async () => {
   try {
     times = montarTimesLocais();
     salvarTimesLocais();
+    reiniciarPresenca();
     $("msg-montar").textContent = "Times montados com sucesso.";
     $("msg-montar").className = "msg";
     renderTimes();

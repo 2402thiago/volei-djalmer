@@ -135,6 +135,13 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   border-top: 1px solid var(--borda);
 }
 .pilha-nivel { color: var(--acento); font-weight: 700; }
+.lista-presenca { display: grid; gap: 12px; }
+.card-presenca h3 { font-size: 16px; }
+.status-presenca { margin: 6px 0 10px; color: var(--texto-suave); font-size: 13px; }
+.ordem-quadra { display: inline-block; margin-top: 8px; padding: 5px 8px; border-radius: 999px; background: var(--acento-suave); color: var(--acento); font-size: 12px; font-weight: 700; }
+.atletas-presenca { display: grid; gap: 7px; }
+.atleta-presenca { width: 100%; text-align: left; }
+.atleta-presenca.presente { background: var(--acento); border-color: var(--acento); color: #fff; font-weight: 600; }
 
 .lista .item {
   background: var(--card);
