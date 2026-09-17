@@ -398,14 +398,21 @@ function montarTimesLocais() {
   if (problemas.length) throw new Error(`Não foi possível sortear os times.\n${problemas.join("\n")}`);
 
   const forcaNivel = { C1: 7, M1: 6, M2: 5, F1: 4, F2: 3, LM1: 2, LF1: 1 };
-  const potes = ["C1", "M1", "M2", "F1", "F2"].map((nivel) =>
+  const potes = ["C1", "M1", "F1"].map((nivel) =>
     ativos.filter((p) => p.nivel === nivel).sort((a, b) => a.ranking - b.ranking)
   );
+  const m2f2 = ativos
+    .filter((p) => p.nivel === "M2" || p.nivel === "F2")
+    .sort((a, b) => forcaNivel[b.nivel] - forcaNivel[a.nivel] || a.ranking - b.ranking);
+  if (![4, 8, 12].includes(m2f2.length)) {
+    throw new Error(`Não foi possível sortear os times.\nM2 + F2 precisam totalizar 4, 8 ou 12 atletas. Quantidade atual: ${m2f2.length}.`);
+  }
+  potes.push(m2f2);
   const levantadores = ativos
     .filter((p) => p.nivel === "LM1" || p.nivel === "LF1")
     .sort((a, b) => a.ranking - b.ranking);
   potes.push(levantadores);
-  const faltantes = ["C1", "M1", "M2", "F1", "F2"].filter((nivel, index) => potes[index].length < 4);
+  const faltantes = ["C1", "M1", "F1"].filter((nivel, index) => potes[index].length < 4);
   if (faltantes.length) throw new Error(`Não foi possível sortear os times.\nPotes com menos de 4 atletas: ${faltantes.join(", ")}.`);
   const novos = [0, 1, 2, 3].map((indice) => ({ id: novoId(), nome: `Time ${indice + 1}`, jogadores: [], nivel_medio: "0.00" }));
   potes.forEach((pote) => {
