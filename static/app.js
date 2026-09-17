@@ -66,6 +66,32 @@ document.querySelectorAll(".aba").forEach((btn) => {
 let participantes = [];
 let participanteId = new Map();
 const filtrosParticipantes = { sexo: "", nivel: "" };
+const STORAGE_CASAIS = "volei.casais.v1";
+let sorteioComCasais = localStorage.getItem(STORAGE_CASAIS) === "true";
+const casaisConfigurados = [
+  ["Thiago Ramalho", "Maria Clara Batista"],
+  ["Douglas Nascimento", "Pattricia"],
+  ["João Alberto", "Thais Moreno"],
+  ["Erivan Junior", "Livia Cristhina"],
+];
+
+const normalizarNome = (nome) => String(nome || "")
+  .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+
+function atualizarBotaoCasais() {
+  const botao = $("btn-casais");
+  botao.textContent = `Casais: ${sorteioComCasais ? "ativado" : "desativado"}`;
+  botao.setAttribute("aria-pressed", String(sorteioComCasais));
+  botao.classList.toggle("primario", sorteioComCasais);
+  botao.classList.toggle("secundario", !sorteioComCasais);
+}
+
+$("btn-casais").addEventListener("click", () => {
+  sorteioComCasais = !sorteioComCasais;
+  localStorage.setItem(STORAGE_CASAIS, String(sorteioComCasais));
+  atualizarBotaoCasais();
+});
+atualizarBotaoCasais();
 
 async function carregarParticipantes() {
   const locais = lerParticipantesLocais();
@@ -322,9 +348,12 @@ $("btn-limpar-dados").addEventListener("click", () => {
   if (!confirm("Tem certeza que deseja apagar todos os participantes e times? Essa ação não pode ser desfeita.")) return;
   localStorage.removeItem(STORAGE_PARTICIPANTES);
   localStorage.removeItem(STORAGE_TIMES);
+  localStorage.removeItem(STORAGE_CASAIS);
   participantes = [];
   participanteId = new Map();
   times = [];
+  sorteioComCasais = false;
+  atualizarBotaoCasais();
   filtrosParticipantes.sexo = "";
   filtrosParticipantes.nivel = "";
   renderParticipantes();
@@ -415,12 +444,36 @@ function montarTimesLocais() {
   const faltantes = ["C1", "M1", "F1"].filter((nivel, index) => potes[index].length < 4);
   if (faltantes.length) throw new Error(`Não foi possível sortear os times.\nPotes com menos de 4 atletas: ${faltantes.join(", ")}.`);
   const novos = [0, 1, 2, 3].map((indice) => ({ id: novoId(), nome: `Time ${indice + 1}`, jogadores: [], nivel_medio: "0.00" }));
-  potes.forEach((pote) => {
-    const inicio = Math.floor(Math.random() * 4);
-    pote.forEach((atleta, index) => {
-      novos[(inicio + index) % 4].jogadores.push(atleta);
+  if (!sorteioComCasais) {
+    potes.forEach((pote) => {
+      const inicio = Math.floor(Math.random() * 4);
+      pote.forEach((atleta, index) => novos[(inicio + index) % 4].jogadores.push(atleta));
     });
-  });
+  } else {
+    const porNome = new Map(ativos.map((p) => [normalizarNome(p.nome), p]));
+    const unidades = [];
+    const usados = new Set();
+    const ausentes = [];
+    casaisConfigurados.forEach((casal) => {
+      const primeiro = porNome.get(normalizarNome(casal[0]));
+      const segundo = porNome.get(normalizarNome(casal[1]));
+      if (!primeiro || !segundo) { ausentes.push(`${casal[0]} e ${casal[1]}`); return; }
+      unidades.push([primeiro, segundo]);
+      usados.add(primeiro.id); usados.add(segundo.id);
+    });
+    ativos.filter((p) => !usados.has(p.id)).forEach((p) => unidades.push([p]));
+    unidades.sort((a, b) => b.length - a.length || b.reduce((s, p) => s + forcaNivel[p.nivel], 0) - a.reduce((s, p) => s + forcaNivel[p.nivel], 0));
+    unidades.forEach((unidade) => {
+      const candidatos = novos.filter((time) => time.jogadores.length + unidade.length <= 6);
+      if (!candidatos.length) throw new Error("Não foi possível manter todos os casais no mesmo time com 6 atletas por time.");
+      candidatos.sort((a, b) => {
+        const pontuar = (time) => unidade.reduce((s, p) => s + forcaNivel[p.nivel], 0) * (time.jogadores.length + 1) + time.jogadores.reduce((s, p) => s + forcaNivel[p.nivel], 0);
+        return pontuar(a) - pontuar(b) || Math.random() - 0.5;
+      });
+      candidatos[0].jogadores.push(...unidade);
+    });
+    if (ausentes.length) $("msg-casais").textContent = `Casais não encontrados: ${ausentes.join(", ")}.`;
+  }
   if (novos.some((time) => time.jogadores.length !== 6)) {
     throw new Error(`Não foi possível sortear os times.\nDistribuição final: ${novos.map((time) => `${time.nome}: ${time.jogadores.length} atletas`).join(", ")}.`);
   }
