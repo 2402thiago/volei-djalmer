@@ -161,6 +161,9 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   box-shadow: 0 0 0 2px var(--acento-suave), 0 4px 12px rgba(76, 110, 245, 0.18);
 }
 .perigo { background: #fff1f1; border-color: #e4a4a4; color: var(--perigo); }
+.editor-casais { margin-top: 10px; border-top: 1px solid var(--borda); }
+.editor-casais label { display: flex; align-items: center; gap: 8px; padding: 9px 0 0; font-size: 13px; color: var(--texto); }
+.editor-casais input { width: auto; }
 .marcador-arraste {
   min-height: 34px;
   margin: 4px 0;

@@ -52,8 +52,12 @@
       </div>
       <div class="card acao dados-locais">
         <label>Sorteio especial</label>
-        <button id="btn-casais" class="secundario" aria-pressed="false">Casais: desativado</button>
+        <div class="linha linha-acoes">
+          <button id="btn-casais" class="secundario" aria-pressed="false">Casais: desativado</button>
+          <button id="btn-editar-casais" class="secundario" aria-expanded="false">Editar casais</button>
+        </div>
         <p id="msg-casais" class="msg">Ative para manter os casais no mesmo time.</p>
+        <div id="editor-casais" class="editor-casais" hidden></div>
       </div>
       <div class="card acao dados-locais">
         <label>Dados do site</label>

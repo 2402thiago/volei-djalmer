@@ -67,6 +67,7 @@ let participantes = [];
 let participanteId = new Map();
 const filtrosParticipantes = { sexo: "", nivel: "" };
 const STORAGE_CASAIS = "volei.casais.v1";
+const STORAGE_CASAIS_ATIVOS = "volei.casais.ativos.v1";
 let sorteioComCasais = localStorage.getItem(STORAGE_CASAIS) === "true";
 const casaisConfigurados = [
   ["Thiago Ramalho", "Maria Clara Batista"],
@@ -74,6 +75,11 @@ const casaisConfigurados = [
   ["João Alberto", "Thais Moreno"],
   ["Erivan Junior", "Livia Cristhina"],
 ];
+let casaisAtivos;
+try { casaisAtivos = JSON.parse(localStorage.getItem(STORAGE_CASAIS_ATIVOS) || "null"); } catch { casaisAtivos = null; }
+if (!Array.isArray(casaisAtivos) || casaisAtivos.length !== casaisConfigurados.length) {
+  casaisAtivos = casaisConfigurados.map(() => true);
+}
 
 const normalizarNome = (nome) => String(nome || "")
   .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
@@ -86,10 +92,27 @@ function atualizarBotaoCasais() {
   botao.classList.toggle("secundario", !sorteioComCasais);
 }
 
+function renderEditorCasais() {
+  const editor = $("editor-casais");
+  editor.innerHTML = casaisConfigurados.map((casal, indice) => `<label><input type="checkbox" data-casal="${indice}" ${casaisAtivos[indice] ? "checked" : ""} />${esc(casal[0])} + ${esc(casal[1])}</label>`).join("");
+  editor.querySelectorAll("[data-casal]").forEach((input) => {
+    input.addEventListener("change", () => {
+      casaisAtivos[Number(input.dataset.casal)] = input.checked;
+      localStorage.setItem(STORAGE_CASAIS_ATIVOS, JSON.stringify(casaisAtivos));
+    });
+  });
+}
+
 $("btn-casais").addEventListener("click", () => {
   sorteioComCasais = !sorteioComCasais;
   localStorage.setItem(STORAGE_CASAIS, String(sorteioComCasais));
   atualizarBotaoCasais();
+});
+$("btn-editar-casais").addEventListener("click", () => {
+  const editor = $("editor-casais");
+  editor.hidden = !editor.hidden;
+  $("btn-editar-casais").setAttribute("aria-expanded", String(!editor.hidden));
+  if (!editor.hidden) renderEditorCasais();
 });
 atualizarBotaoCasais();
 
@@ -349,10 +372,12 @@ $("btn-limpar-dados").addEventListener("click", () => {
   localStorage.removeItem(STORAGE_PARTICIPANTES);
   localStorage.removeItem(STORAGE_TIMES);
   localStorage.removeItem(STORAGE_CASAIS);
+  localStorage.removeItem(STORAGE_CASAIS_ATIVOS);
   participantes = [];
   participanteId = new Map();
   times = [];
   sorteioComCasais = false;
+  casaisAtivos = casaisConfigurados.map(() => true);
   atualizarBotaoCasais();
   filtrosParticipantes.sexo = "";
   filtrosParticipantes.nivel = "";
@@ -454,7 +479,8 @@ function montarTimesLocais() {
     const unidades = [];
     const usados = new Set();
     const ausentes = [];
-    casaisConfigurados.forEach((casal) => {
+    casaisConfigurados.forEach((casal, indice) => {
+      if (!casaisAtivos[indice]) return;
       const primeiro = porNome.get(normalizarNome(casal[0]));
       const segundo = porNome.get(normalizarNome(casal[1]));
       if (!primeiro || !segundo) { ausentes.push(`${casal[0]} e ${casal[1]}`); return; }
@@ -462,17 +488,64 @@ function montarTimesLocais() {
       usados.add(primeiro.id); usados.add(segundo.id);
     });
     ativos.filter((p) => !usados.has(p.id)).forEach((p) => unidades.push([p]));
-    unidades.sort((a, b) => b.length - a.length || b.reduce((s, p) => s + forcaNivel[p.nivel], 0) - a.reduce((s, p) => s + forcaNivel[p.nivel], 0));
-    unidades.forEach((unidade) => {
-      const candidatos = novos.filter((time) => time.jogadores.length + unidade.length <= 6);
-      if (!candidatos.length) throw new Error("Não foi possível manter todos os casais no mesmo time com 6 atletas por time.");
-      candidatos.sort((a, b) => {
-        const pontuar = (time) => unidade.reduce((s, p) => s + forcaNivel[p.nivel], 0) * (time.jogadores.length + 1) + time.jogadores.reduce((s, p) => s + forcaNivel[p.nivel], 0);
-        return pontuar(a) - pontuar(b) || Math.random() - 0.5;
-      });
-      candidatos[0].jogadores.push(...unidade);
+    const categoria = (p) => {
+      if (p.nivel === "M2" || p.nivel === "F2") return "M2F2";
+      if (p.nivel === "LM1" || p.nivel === "LF1") return "levantadores";
+      return p.nivel;
+    };
+    const embaralhar = (itens) => [...itens].sort(() => Math.random() - 0.5);
+    const metas = {};
+    const grupos = ["C1", "M1", "F1", "M2F2", "levantadores"];
+    const totaisPorTime = Array(4).fill(0);
+    grupos.forEach((grupo) => {
+      const total = ativos.filter((p) => categoria(p) === grupo).length;
+      metas[grupo] = Array(4).fill(Math.floor(total / 4));
+      totaisPorTime.forEach((_, time) => { totaisPorTime[time] += metas[grupo][time]; });
     });
-    if (ausentes.length) $("msg-casais").textContent = `Casais não encontrados: ${ausentes.join(", ")}.`;
+    embaralhar(grupos).forEach((grupo) => {
+      const total = ativos.filter((p) => categoria(p) === grupo).length;
+      const escolhidos = new Set();
+      for (let extra = 0; extra < total % 4; extra += 1) {
+        const menorTotal = Math.min(...totaisPorTime.filter((_, time) => !escolhidos.has(time)));
+        const candidatos = embaralhar([0, 1, 2, 3].filter((time) => !escolhidos.has(time) && totaisPorTime[time] === menorTotal));
+        const time = candidatos[0];
+        metas[grupo][time] += 1;
+        totaisPorTime[time] += 1;
+        escolhidos.add(time);
+      }
+    });
+    const distribuicao = novos.map(() => ({ C1: 0, M1: 0, F1: 0, M2F2: 0, levantadores: 0 }));
+    unidades.sort((a, b) => b.length - a.length || b.reduce((s, p) => s + forcaNivel[p.nivel], 0) - a.reduce((s, p) => s + forcaNivel[p.nivel], 0));
+    let tentativas = 0;
+    const distribuir = (indice) => {
+      if (indice === unidades.length) return true;
+      if (++tentativas > 100000) return false;
+      const unidade = unidades[indice];
+      const porGrupo = unidade.reduce((totais, p) => {
+        const grupo = categoria(p);
+        totais[grupo] = (totais[grupo] || 0) + 1;
+        return totais;
+      }, {});
+      const candidatos = [0, 1, 2, 3].filter((time) => novos[time].jogadores.length + unidade.length <= 6 &&
+        Object.entries(porGrupo).every(([grupo, quantidade]) => distribuicao[time][grupo] + quantidade <= metas[grupo][time])
+      ).sort((a, b) => {
+        const forcaA = novos[a].jogadores.reduce((s, p) => s + forcaNivel[p.nivel], 0);
+        const forcaB = novos[b].jogadores.reduce((s, p) => s + forcaNivel[p.nivel], 0);
+        return forcaA - forcaB || Math.random() - 0.5;
+      });
+      return candidatos.some((time) => {
+        novos[time].jogadores.push(...unidade);
+        Object.entries(porGrupo).forEach(([grupo, quantidade]) => { distribuicao[time][grupo] += quantidade; });
+        if (distribuir(indice + 1)) return true;
+        novos[time].jogadores.splice(-unidade.length);
+        Object.entries(porGrupo).forEach(([grupo, quantidade]) => { distribuicao[time][grupo] -= quantidade; });
+        return false;
+      });
+    };
+    if (!distribuir(0)) {
+      throw new Error('Não foi possível sortear mantendo os casais ativos e o nivelamento dos potes.\nRevise os casais em "Editar casais" e desative algum casal para continuar.');
+    }
+    $("msg-casais").textContent = ausentes.length ? `Casais não encontrados: ${ausentes.join(", ")}.` : "Casais ativos permanecem no mesmo time.";
   }
   if (novos.some((time) => time.jogadores.length !== 6)) {
     throw new Error(`Não foi possível sortear os times.\nDistribuição final: ${novos.map((time) => `${time.nome}: ${time.jogadores.length} atletas`).join(", ")}.`);
