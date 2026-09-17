@@ -168,7 +168,7 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   border-color: var(--acento);
   box-shadow: 0 0 0 2px var(--acento-suave), 0 4px 12px rgba(76, 110, 245, 0.18);
 }
-.icone-coracao { width: 34px; height: 30px; padding: 0; border-radius: 999px; color: var(--perigo); font-size: 22px; line-height: 1; }
+.icone-coracao { width: 28px; height: 26px; padding: 0; border-radius: 999px; background: var(--acento-suave); border-color: var(--acento-suave); color: var(--acento); font-size: 17px; line-height: 1; }
 .popup-casais { width: min(420px, calc(100% - 32px)); margin: auto; border: 0; border-radius: var(--raio); padding: 18px; color: var(--texto); box-shadow: 0 16px 48px rgba(20, 24, 40, 0.25); }
 .popup-casais::backdrop { background: rgba(20, 24, 40, 0.45); }
 .cabecalho-popup { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }

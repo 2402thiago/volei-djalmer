@@ -59,8 +59,17 @@ document.querySelectorAll(".aba").forEach((btn) => {
     document.querySelectorAll(".tela").forEach((t) => t.classList.remove("ativa"));
     btn.classList.add("ativa");
     document.getElementById(btn.dataset.tela).classList.add("ativa");
+    atualizarVisibilidadeCasais(btn.dataset.tela);
   });
 });
+
+function atualizarVisibilidadeCasais(tela) {
+  const botao = $("btn-abrir-casais");
+  botao.hidden = tela !== "participantes";
+  if (tela !== "participantes" && $("popup-casais").open) $("popup-casais").close();
+}
+
+atualizarVisibilidadeCasais("dashboard");
 
 // ---- Participantes ---------------------------------------------------
 let participantes = [];
