@@ -9,8 +9,28 @@
 <body>
   <header class="topo">
     <h1>Vôlei Djalmer</h1>
-    <span id="indicador-sync" class="badge" title="Status da sincronização">…</span>
+    <div class="acoes-topo">
+      <span id="indicador-sync" class="badge" title="Status da sincronização">…</span>
+      <button id="btn-abrir-casais" class="icone-coracao" title="Gerenciar casais" aria-label="Gerenciar casais">&#9825;</button>
+    </div>
   </header>
+
+  <dialog id="popup-casais" class="popup-casais">
+    <div class="cabecalho-popup">
+      <h2>Casais</h2>
+      <button id="btn-fechar-casais" class="fechar-popup" aria-label="Fechar">&times;</button>
+    </div>
+    <button id="btn-casais" class="secundario" aria-pressed="false">Casais: desativado</button>
+    <p id="msg-casais" class="msg">Ative para manter os casais no mesmo time.</p>
+    <div id="editor-casais" class="editor-casais"></div>
+    <div class="adicionar-casal">
+      <h3>Adicionar casal</h3>
+      <input id="nome-casal-1" type="text" placeholder="Primeiro participante" maxlength="80" />
+      <input id="nome-casal-2" type="text" placeholder="Segundo participante" maxlength="80" />
+      <button id="btn-adicionar-casal" class="primario">Adicionar casal</button>
+      <p id="msg-adicionar-casal" class="msg"></p>
+    </div>
+  </dialog>
 
   <!-- Navegação inferior -->
   <nav class="abas">
@@ -50,15 +70,6 @@
           <button id="btn-compartilhar" class="secundario">Compartilhar lista</button>
         </div>
         <p class="msg">A lista é mantida localmente neste navegador.</p>
-      </div>
-      <div class="card acao dados-locais">
-        <label>Sorteio especial</label>
-        <div class="linha linha-acoes">
-          <button id="btn-casais" class="secundario" aria-pressed="false">Casais: desativado</button>
-          <button id="btn-editar-casais" class="secundario" aria-expanded="false">Editar casais</button>
-        </div>
-        <p id="msg-casais" class="msg">Ative para manter os casais no mesmo time.</p>
-        <div id="editor-casais" class="editor-casais" hidden></div>
       </div>
       <div class="card acao dados-locais">
         <label>Dados do site</label>

@@ -68,13 +68,19 @@ let participanteId = new Map();
 const filtrosParticipantes = { sexo: "", nivel: "" };
 const STORAGE_CASAIS = "volei.casais.v1";
 const STORAGE_CASAIS_ATIVOS = "volei.casais.ativos.v1";
+const STORAGE_CASAIS_CONFIG = "volei.casais.config.v1";
 let sorteioComCasais = localStorage.getItem(STORAGE_CASAIS) === "true";
-const casaisConfigurados = [
+const CASAIS_PADRAO = [
   ["Thiago Ramalho", "Maria Clara Batista"],
   ["Douglas Nascimento", "Pattricia"],
   ["João Alberto", "Thais Moreno"],
   ["Erivan Junior", "Livia Cristhina"],
 ];
+let casaisConfigurados;
+try { casaisConfigurados = JSON.parse(localStorage.getItem(STORAGE_CASAIS_CONFIG) || "null"); } catch { casaisConfigurados = null; }
+if (!Array.isArray(casaisConfigurados) || casaisConfigurados.some((casal) => !Array.isArray(casal) || casal.length !== 2)) {
+  casaisConfigurados = CASAIS_PADRAO.map((casal) => [...casal]);
+}
 let casaisAtivos;
 try { casaisAtivos = JSON.parse(localStorage.getItem(STORAGE_CASAIS_ATIVOS) || "null"); } catch { casaisAtivos = null; }
 if (!Array.isArray(casaisAtivos) || casaisAtivos.length !== casaisConfigurados.length) {
@@ -92,13 +98,18 @@ function atualizarBotaoCasais() {
   botao.classList.toggle("secundario", !sorteioComCasais);
 }
 
+function salvarConfiguracaoCasais() {
+  localStorage.setItem(STORAGE_CASAIS_CONFIG, JSON.stringify(casaisConfigurados));
+  localStorage.setItem(STORAGE_CASAIS_ATIVOS, JSON.stringify(casaisAtivos));
+}
+
 function renderEditorCasais() {
   const editor = $("editor-casais");
   editor.innerHTML = casaisConfigurados.map((casal, indice) => `<label><input type="checkbox" data-casal="${indice}" ${casaisAtivos[indice] ? "checked" : ""} />${esc(casal[0])} + ${esc(casal[1])}</label>`).join("");
   editor.querySelectorAll("[data-casal]").forEach((input) => {
     input.addEventListener("change", () => {
       casaisAtivos[Number(input.dataset.casal)] = input.checked;
-      localStorage.setItem(STORAGE_CASAIS_ATIVOS, JSON.stringify(casaisAtivos));
+      salvarConfiguracaoCasais();
     });
   });
 }
@@ -108,11 +119,42 @@ $("btn-casais").addEventListener("click", () => {
   localStorage.setItem(STORAGE_CASAIS, String(sorteioComCasais));
   atualizarBotaoCasais();
 });
-$("btn-editar-casais").addEventListener("click", () => {
-  const editor = $("editor-casais");
-  editor.hidden = !editor.hidden;
-  $("btn-editar-casais").setAttribute("aria-expanded", String(!editor.hidden));
-  if (!editor.hidden) renderEditorCasais();
+$("btn-abrir-casais").addEventListener("click", () => {
+  renderEditorCasais();
+  $("popup-casais").showModal();
+});
+$("btn-fechar-casais").addEventListener("click", () => {
+  $("popup-casais").close();
+});
+$("btn-adicionar-casal").addEventListener("click", () => {
+  const primeiro = participantes.find((p) => p.status === "ativo" && normalizarNome(p.nome) === normalizarNome($("nome-casal-1").value));
+  const segundo = participantes.find((p) => p.status === "ativo" && normalizarNome(p.nome) === normalizarNome($("nome-casal-2").value));
+  const mensagem = $("msg-adicionar-casal");
+  if (!primeiro || !segundo) {
+    mensagem.textContent = "Informe dois participantes ativos da lista.";
+    mensagem.className = "msg erro";
+    return;
+  }
+  if (primeiro.id === segundo.id) {
+    mensagem.textContent = "Um casal precisa ter dois participantes diferentes.";
+    mensagem.className = "msg erro";
+    return;
+  }
+  const chave = [normalizarNome(primeiro.nome), normalizarNome(segundo.nome)].sort().join("|");
+  const existe = casaisConfigurados.some((casal) => [normalizarNome(casal[0]), normalizarNome(casal[1])].sort().join("|") === chave);
+  if (existe) {
+    mensagem.textContent = "Este casal já está cadastrado.";
+    mensagem.className = "msg erro";
+    return;
+  }
+  casaisConfigurados.push([primeiro.nome, segundo.nome]);
+  casaisAtivos.push(true);
+  salvarConfiguracaoCasais();
+  $("nome-casal-1").value = "";
+  $("nome-casal-2").value = "";
+  mensagem.textContent = "Casal adicionado e ativado.";
+  mensagem.className = "msg";
+  renderEditorCasais();
 });
 atualizarBotaoCasais();
 
@@ -445,12 +487,14 @@ $("btn-limpar-dados").addEventListener("click", () => {
   localStorage.removeItem(STORAGE_TIMES);
   localStorage.removeItem(STORAGE_CASAIS);
   localStorage.removeItem(STORAGE_CASAIS_ATIVOS);
+  localStorage.removeItem(STORAGE_CASAIS_CONFIG);
   localStorage.removeItem(STORAGE_PRESENCA);
   participantes = [];
   participanteId = new Map();
   times = [];
   presenca = { assinatura: "", atletas: {}, ordem: [] };
   sorteioComCasais = false;
+  casaisConfigurados = CASAIS_PADRAO.map((casal) => [...casal]);
   casaisAtivos = casaisConfigurados.map(() => true);
   atualizarBotaoCasais();
   filtrosParticipantes.sexo = "";
