@@ -201,7 +201,7 @@ $("progresso-tarefa").addEventListener("click", () => {
 $("btn-fechar-progresso").addEventListener("click", (event) => { event.stopPropagation(); $("progresso-tarefa").hidden = true; });
 
 $("btn-conectar-sheets").addEventListener("click", () => executarSheets(async () => {
-  if (!confirm("Conectar apagará todas as abas e dados atuais da planilha Google e criará a aba Nivelamento. Deseja continuar?")) return;
+  if (!confirm("Conectar limpará apenas os dados da aba Nivelamento e criará a aba Acessos, se necessário. As demais abas serão preservadas. Deseja continuar?")) return;
   await api.enviar("/api/nivelamento/conectar", "POST", salvarCredenciaisDaSessao());
   sheetsConectado = true;
   localStorage.setItem(STORAGE_SHEETS_CONECTADO, "true");

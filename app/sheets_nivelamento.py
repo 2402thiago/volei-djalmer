@@ -3,10 +3,12 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 
 
 HEADERS = ["id", "nome", "sexo", "pote", "potes_adicionais", "aliases", "ordem", "atualizado_em"]
+ACCESS_HEADERS = ["email", "ativo"]
 
 
 class SheetsNivelamento:
@@ -57,15 +59,14 @@ class SheetsNivelamento:
 
     def conectar_resetar(self) -> None:
         spreadsheet = self._spreadsheet()
-        worksheets = spreadsheet.worksheets()
-        worksheet = worksheets[0] if worksheets else spreadsheet.add_worksheet(title="Nivelamento", rows=1000, cols=len(HEADERS))
-        for other in worksheets[1:]:
-            spreadsheet.del_worksheet(other)
-        if worksheet.title != "Nivelamento":
-            worksheet.update_title("Nivelamento")
+        try:
+            worksheet = spreadsheet.worksheet("Nivelamento")
+        except Exception:
+            worksheet = spreadsheet.add_worksheet(title="Nivelamento", rows=1000, cols=len(HEADERS))
         worksheet.clear()
         worksheet.resize(rows=1000, cols=len(HEADERS))
         worksheet.append_row(HEADERS, value_input_option="RAW")
+        self._worksheet_acessos()
 
     def _worksheet(self):
         spreadsheet = self._spreadsheet()
@@ -75,6 +76,33 @@ class SheetsNivelamento:
             worksheet = spreadsheet.add_worksheet(title="Nivelamento", rows=1000, cols=len(HEADERS))
             worksheet.append_row(HEADERS, value_input_option="RAW")
         return worksheet
+
+    def _worksheet_acessos(self):
+        spreadsheet = self._spreadsheet()
+        try:
+            worksheet = spreadsheet.worksheet("Acessos")
+        except Exception:
+            worksheet = spreadsheet.add_worksheet(title="Acessos", rows=1000, cols=len(ACCESS_HEADERS))
+        if not worksheet.get_all_values():
+            worksheet.append_row(ACCESS_HEADERS, value_input_option="RAW")
+        return worksheet
+
+    def emails_autorizados(self) -> set[str]:
+        valores = self._worksheet_acessos().get_all_values()
+        if not valores:
+            return set()
+        cabecalho = {coluna.strip().casefold(): indice for indice, coluna in enumerate(valores[0])}
+        email_indice = cabecalho.get("email")
+        ativo_indice = cabecalho.get("ativo")
+        if email_indice is None or ativo_indice is None:
+            return set()
+        autorizados = set()
+        for linha in valores[1:]:
+            email = linha[email_indice].strip().casefold() if len(linha) > email_indice else ""
+            ativo = linha[ativo_indice].strip().casefold() if len(linha) > ativo_indice else ""
+            if ativo == "sim" and re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+                autorizados.add(email)
+        return autorizados
 
     def sincronizar(self, atletas: list[dict]) -> dict:
         worksheet = self._worksheet()

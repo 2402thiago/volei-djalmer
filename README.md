@@ -73,6 +73,23 @@ SYNC_INTERVAL_SECONDS=20
 O **ID da planilha** é a parte da URL entre `/d/` e `/edit`: para
 `https://docs.google.com/spreadsheets/d/1AbC.../edit`, o ID é `1AbC...`.
 
+### Acessos e OAuth futuro
+
+A planilha pode conter a aba `Acessos`, preservada ao conectar ou reinicializar
+`Nivelamento`. Ela deve ter as colunas `email` e `ativo`; somente linhas com
+`ativo` igual a `sim` concederão acesso quando o login OAuth for ativado.
+
+```text
+email | ativo
+organizadora@exemplo.com | sim
+```
+
+Enquanto `GOOGLE_OAUTH_ENABLED=false`, o login Google não é usado. Quando ele
+for implementado, configure no Vercel `GOOGLE_OAUTH_CLIENT_ID`,
+`GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI` e
+`GOOGLE_OAUTH_SESSION_SECRET`. Os usuários só autenticarão sua identidade;
+a conta de serviço continuará sendo a única credencial com acesso à planilha.
+
 ### Sem credenciais (modo memória)
 
 Se não configurar o `.env`, o sistema roda em **modo memória**: a interface e a
