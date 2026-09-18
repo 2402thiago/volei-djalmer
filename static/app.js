@@ -826,35 +826,36 @@ function montarTimesLocais() {
   if (problemas.length) throw new Error(`Não foi possível sortear os times.\n${problemas.join("\n")}`);
 
   const forcaNivel = { C1: 7, M1: 6, M2: 5, F1: 4, F2: 3, LM1: 2, LF1: 1 };
-  const potesObrigatorios = ["C1", "M1", "F1"];
-  const opcoesDePote = new Map(ativos.map((p) => [p.id, [p.nivel, ...p.potes_adicionais.filter((pote) => pote !== p.nivel)]]));
-  const contagens = Object.fromEntries(NIVEIS.map((pote) => [pote, 0]));
+  const normalizarOpcaoPote = (pote) => (pote === "LM1" || pote === "LF1" ? "levantadores" : (pote === "F2" ? "M2F2" : pote));
+  const opcoesDePote = new Map(ativos.map((p) => [p.id, [p.nivel, ...p.potes_adicionais.filter((pote) => pote !== p.nivel)].map(normalizarOpcaoPote).filter((pote, indice, lista) => lista.indexOf(pote) === indice)]));
+  const metasPotes = { C1: 4, M1: 4, F1: 4, M2: 4, M2F2: 4, levantadores: 4 };
+  const contagens = { C1: 0, M1: 0, F1: 0, M2: 0, M2F2: 0, levantadores: 0 };
   const ordenadosParaPote = [...ativos].sort((a, b) => opcoesDePote.get(a.id).length - opcoesDePote.get(b.id).length || a.ranking - b.ranking);
-  const combinacoesM2F2 = [4, 8, 12];
   let tentativasDePote = 0;
 
   const atribuicaoValida = (indice) => {
     if (++tentativasDePote > 100000) return false;
     const restantes = ordenadosParaPote.slice(indice);
-    if (potesObrigatorios.some((pote) => contagens[pote] + restantes.filter((p) => opcoesDePote.get(p.id).includes(pote)).length < 4)) return false;
-    const atuaisM2F2 = contagens.M2 + contagens.F2;
-    const restantesM2F2 = restantes.filter((p) => opcoesDePote.get(p.id).some((pote) => pote === "M2" || pote === "F2")).length;
-    if (!combinacoesM2F2.some((total) => total >= atuaisM2F2 && total <= atuaisM2F2 + restantesM2F2)) return false;
+    if (Object.entries(metasPotes).some(([pote, meta]) => contagens[pote] > meta || contagens[pote] + restantes.filter((p) => opcoesDePote.get(p.id).some((opcao) => opcao === pote || (pote === "M2F2" && opcao === "M2"))).length < meta)) return false;
     if (indice === ordenadosParaPote.length) {
-      return potesObrigatorios.every((pote) => contagens[pote] >= 4) && combinacoesM2F2.includes(contagens.M2 + contagens.F2);
+      return Object.entries(metasPotes).every(([pote, meta]) => contagens[pote] === meta);
     }
     const atleta = ordenadosParaPote[indice];
-    const opcoes = [...opcoesDePote.get(atleta.id)].sort((a, b) => {
+    const opcoes = [...opcoesDePote.get(atleta.id)].map((pote) => pote === "M2" ? ["M2", "M2F2"] : pote).flat().filter((pote, indice, lista) => lista.indexOf(pote) === indice).sort((a, b) => {
       const principalA = a === atleta.pote_principal ? 0 : 1;
       const principalB = b === atleta.pote_principal ? 0 : 1;
       return principalA - principalB || (potesObrigatorios.includes(a) ? -1 : 1) - (potesObrigatorios.includes(b) ? -1 : 1);
     });
     return opcoes.some((pote) => {
       atleta.nivel = pote;
-      contagens[pote] += 1;
+      const categoria = pote === "M2" && contagens.M2 >= metasPotes.M2 ? "M2F2" : pote;
+      if (!metasPotes[categoria] || contagens[categoria] >= metasPotes[categoria]) return false;
+      contagens[categoria] += 1;
+      atleta.pote_sorteio = categoria;
       if (atribuicaoValida(indice + 1)) return true;
-      contagens[pote] -= 1;
+      contagens[categoria] -= 1;
       atleta.nivel = atleta.pote_principal;
+      atleta.pote_sorteio = null;
       return false;
     });
   };
@@ -871,17 +872,15 @@ function montarTimesLocais() {
   ativos.forEach((p) => { if (p.nivel !== p.pote_principal) p.promovido_de = p.pote_principal; });
   const forcaGlobal = (p) => ativos.length - p.ranking + 1;
   const potes = ["C1", "M1", "F1"].map((nivel) =>
-    ativos.filter((p) => p.nivel === nivel).sort((a, b) => a.ranking - b.ranking)
+    ativos.filter((p) => p.pote_sorteio === nivel).sort((a, b) => a.ranking - b.ranking)
   );
   const m2f2 = ativos
-    .filter((p) => p.nivel === "M2" || p.nivel === "F2")
+    .filter((p) => p.pote_sorteio === "M2" || p.pote_sorteio === "M2F2")
     .sort((a, b) => forcaNivel[b.nivel] - forcaNivel[a.nivel] || a.ranking - b.ranking);
-  if (![4, 8, 12].includes(m2f2.length)) {
-    throw new Error(`Não foi possível sortear os times.\nM2 + F2 precisam totalizar 4, 8 ou 12 atletas. Quantidade atual: ${m2f2.length}.`);
-  }
+  if (m2f2.length !== 8) throw new Error(`Não foi possível sortear os times.\nO conjunto M2 + F2 precisa preencher 8 vagas. Quantidade atribuída: ${m2f2.length}.`);
   potes.push(m2f2);
   const levantadores = ativos
-    .filter((p) => p.nivel === "LM1" || p.nivel === "LF1")
+    .filter((p) => p.pote_sorteio === "levantadores")
     .sort((a, b) => a.ranking - b.ranking);
   potes.push(levantadores);
   const faltantes = ["C1", "M1", "F1"].filter((nivel, index) => potes[index].length < 4);
@@ -907,31 +906,13 @@ function montarTimesLocais() {
     });
     ativos.filter((p) => !usados.has(p.id)).forEach((p) => unidades.push([p]));
     const categoria = (p) => {
-      if (p.nivel === "M2" || p.nivel === "F2") return "M2F2";
-      if (p.nivel === "LM1" || p.nivel === "LF1") return "levantadores";
-      return p.nivel;
+      if (p.pote_sorteio === "M2F2") return "M2F2";
+      if (p.pote_sorteio === "levantadores") return "levantadores";
+      return p.pote_sorteio;
     };
     const embaralhar = (itens) => [...itens].sort(() => Math.random() - 0.5);
-    const metas = {};
     const grupos = ["C1", "M1", "F1", "M2F2", "levantadores"];
-    const totaisPorTime = Array(4).fill(0);
-    grupos.forEach((grupo) => {
-      const total = ativos.filter((p) => categoria(p) === grupo).length;
-      metas[grupo] = Array(4).fill(Math.floor(total / 4));
-      totaisPorTime.forEach((_, time) => { totaisPorTime[time] += metas[grupo][time]; });
-    });
-    embaralhar(grupos).forEach((grupo) => {
-      const total = ativos.filter((p) => categoria(p) === grupo).length;
-      const escolhidos = new Set();
-      for (let extra = 0; extra < total % 4; extra += 1) {
-        const menorTotal = Math.min(...totaisPorTime.filter((_, time) => !escolhidos.has(time)));
-        const candidatos = embaralhar([0, 1, 2, 3].filter((time) => !escolhidos.has(time) && totaisPorTime[time] === menorTotal));
-        const time = candidatos[0];
-        metas[grupo][time] += 1;
-        totaisPorTime[time] += 1;
-        escolhidos.add(time);
-      }
-    });
+    const metas = Object.fromEntries(grupos.map((grupo) => [grupo, Array(4).fill(4)]));
     const distribuicao = novos.map(() => ({ C1: 0, M1: 0, F1: 0, M2F2: 0, levantadores: 0 }));
     unidades.sort((a, b) => b.length - a.length || b.reduce((s, p) => s + forcaGlobal(p), 0) - a.reduce((s, p) => s + forcaGlobal(p), 0));
     let tentativas = 0;
