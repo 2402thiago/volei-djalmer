@@ -118,13 +118,22 @@ function mensagemSheets(texto, erro = false) {
   $("msg-sheets").className = erro ? "msg erro" : "msg";
 }
 
+function credenciaisSheetsSite() {
+  return { sheet_id: $("sheets-id-site").value.trim(), service_account_info: $("sheets-credencial-site").value.trim() };
+}
+
+$("btn-testar-sheets").addEventListener("click", () => executarSheets(async () => {
+  const resposta = await api.enviar("/api/nivelamento/testar", "POST", credenciaisSheetsSite());
+  mensagemSheets(resposta.mensagem);
+}));
+
 async function executarSheets(acao) {
   try { return await acao(); } catch (erro) { mensagemSheets(erro.message, true); return null; }
 }
 
 $("btn-conectar-sheets").addEventListener("click", () => executarSheets(async () => {
   if (!confirm("Conectar apagará todas as abas e dados atuais da planilha Google e criará a aba Nivelamento. Deseja continuar?")) return;
-  await api.enviar("/api/nivelamento/conectar", "POST");
+  await api.enviar("/api/nivelamento/conectar", "POST", credenciaisSheetsSite());
   sheetsConectado = true;
   localStorage.setItem(STORAGE_SHEETS_CONECTADO, "true");
   mensagemSheets("Planilha conectada e preparada.");

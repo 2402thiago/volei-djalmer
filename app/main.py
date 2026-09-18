@@ -123,10 +123,21 @@ def cadastro_payload(payload: dict) -> list[dict]:
 
 
 @app.post("/api/nivelamento/conectar")
-def conectar_nivelamento():
+def conectar_nivelamento(payload: dict):
     try:
+        sheets_nivelamento.configurar(payload.get("sheet_id", ""), payload.get("service_account_info", ""))
         sheets_nivelamento.conectar_resetar()
         return {"ok": True, "mensagem": "Planilha preparada com a aba Nivelamento."}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/api/nivelamento/testar")
+def testar_nivelamento(payload: dict):
+    try:
+        sheets_nivelamento.configurar(payload.get("sheet_id", ""), payload.get("service_account_info", ""))
+        sheets_nivelamento._spreadsheet()
+        return {"ok": True, "mensagem": "Conexão com Google Sheets validada."}
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 

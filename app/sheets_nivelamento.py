@@ -14,6 +14,11 @@ class SheetsNivelamento:
         self.sheet_id = os.getenv("GOOGLE_SHEETS_ID", "")
         self.client = None
 
+    def configurar(self, sheet_id: str, service_account_info: str) -> None:
+        self.sheet_id = sheet_id.strip()
+        os.environ["GOOGLE_SERVICE_ACCOUNT_INFO"] = service_account_info.strip()
+        self.client = None
+
     def _spreadsheet(self):
         if self.client is None:
             try:

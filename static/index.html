@@ -74,6 +74,13 @@
       </div>
       <div class="card acao dados-locais">
         <label>Dados do site</label>
+        <div class="config-sheets">
+          <input id="sheets-id-site" type="text" placeholder="ID da planilha Google" autocomplete="off" />
+          <textarea id="sheets-credencial-site" placeholder="JSON da conta de serviço (não será salvo no navegador)" rows="4" autocomplete="off"></textarea>
+          <div class="linha linha-acoes">
+            <button id="btn-testar-sheets" class="secundario">Testar conexão</button>
+          </div>
+        </div>
         <div class="linha linha-acoes">
           <button id="btn-conectar-sheets" class="secundario">Conectar</button>
           <button id="btn-desconectar-sheets" class="secundario">Desconectar</button>
