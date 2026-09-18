@@ -203,6 +203,23 @@ function encontrarCadastro(nome) {
   return cadastroAtletas.find((atleta) => normalizarNome(atleta.nome) === chave || atleta.aliases.some((alias) => normalizarNome(alias) === chave));
 }
 
+function buscarCadastro(termo) {
+  const chave = normalizarNome(termo);
+  if (!chave) return cadastroAtletas;
+  return cadastroAtletas.filter((atleta) => normalizarNome(atleta.nome).includes(chave) || atleta.aliases.some((alias) => normalizarNome(alias).includes(chave)));
+}
+
+function renderResultadosCadastro(elemento, atletas, aoSelecionar) {
+  elemento.innerHTML = "";
+  atletas.forEach((atleta) => {
+    const botao = document.createElement("button");
+    botao.className = "secundario resultado-vinculo";
+    botao.textContent = `${atleta.nome}${atleta.aliases.length ? ` (${atleta.aliases.join(", ")})` : ""}`;
+    botao.addEventListener("click", () => aoSelecionar(atleta));
+    elemento.appendChild(botao);
+  });
+}
+
 function migrarCadastroLegado() {
   if (cadastroAtletas.length || !participantes.length || !participantes.some((p) => NIVEIS.includes(p.nivel))) return;
   const forca = { C1: 7, M1: 6, M2: 5, F1: 4, F2: 3, LM1: 2, LF1: 1 };
@@ -335,6 +352,49 @@ $("btn-cadastro-vincular").addEventListener("click", () => {
   mensagem.className = "msg";
 });
 
+$("btn-cadastro-buscar").addEventListener("click", () => {
+  const resultados = $("resultados-busca-cadastro");
+  renderResultadosCadastro(resultados, buscarCadastro($("cadastro-alias").value), (atleta) => {
+    $("cadastro-alvo").value = atleta.id;
+    resultados.innerHTML = "";
+  });
+});
+
+let pendenteParaVinculo = null;
+
+function vincularParticipantePendente(participante, atleta) {
+  const existente = encontrarCadastro(participante.nome);
+  if (existente && existente.id !== atleta.id) throw new Error("Este nome já está vinculado a outro atleta cadastrado.");
+  if (normalizarNome(atleta.nome) !== normalizarNome(participante.nome) && !atleta.aliases.some((alias) => normalizarNome(alias) === normalizarNome(participante.nome))) {
+    atleta.aliases.push(participante.nome);
+  }
+  participante.id = atleta.id;
+  participante.cadastro_id = atleta.id;
+  participante.nome = atleta.nome;
+  participante.sexo = atleta.sexo;
+  participante.nivel = atleta.pote || null;
+  participante.ranking = cadastroAtletas.indexOf(atleta) + 1;
+  participante.potes_adicionais = atleta.potesAdicionais;
+  salvarCadastro();
+  salvarParticipantesLocais();
+  renderCadastro();
+  renderParticipantes();
+}
+
+$("btn-fechar-vinculo-pendente").addEventListener("click", () => $("popup-vincular-pendente").close());
+$("busca-vinculo-pendente").addEventListener("input", () => {
+  renderResultadosCadastro($("resultados-vinculo-pendente"), buscarCadastro($("busca-vinculo-pendente").value), (atleta) => {
+    const participante = participantes.find((p) => p.id === pendenteParaVinculo);
+    if (!participante) return;
+    try {
+      vincularParticipantePendente(participante, atleta);
+      $("popup-vincular-pendente").close();
+    } catch (erro) {
+      alert(erro.message);
+    }
+  });
+});
+
 function atualizarBotaoCasais() {
   const botao = $("btn-casais");
   botao.textContent = `Casais: ${sorteioComCasais ? "ativado" : "desativado"}`;
@@ -445,7 +505,7 @@ function renderParticipantes() {
       <div>
         <div class="nome">${esc(p.nome)}</div>
         <div class="det">${pendente ? "Não cadastrado no nivelamento" : `${p.sexo || "Sexo não definido"} · ${p.nivel || "Pote não definido"} · posição geral ${p.ranking || "não definida"}`}</div>
-      </div>${pendente ? `<button class="secundario" data-adicionar-pendente="${p.id}">Adicionar ao Cadastro</button>` : ""}`;
+      </div>${pendente ? `<div class="linha linha-acoes"><button class="secundario" data-adicionar-pendente="${p.id}">Adicionar ao Cadastro</button><button class="secundario" data-vincular-pendente="${p.id}">Vincular a cadastro existente</button></div>` : ""}`;
     lista.appendChild(item);
   });
   lista.querySelectorAll("[data-adicionar-pendente]").forEach((botao) => botao.addEventListener("click", () => {
@@ -457,6 +517,21 @@ function renderParticipantes() {
     participante.nome = atleta.nome;
     salvarParticipantesLocais();
     renderParticipantes();
+  }));
+  lista.querySelectorAll("[data-vincular-pendente]").forEach((botao) => botao.addEventListener("click", () => {
+    pendenteParaVinculo = botao.dataset.vincularPendente;
+    $("busca-vinculo-pendente").value = "";
+    renderResultadosCadastro($("resultados-vinculo-pendente"), cadastroAtletas, (atleta) => {
+      const participante = participantes.find((p) => p.id === pendenteParaVinculo);
+      if (!participante) return;
+      try {
+        vincularParticipantePendente(participante, atleta);
+        $("popup-vincular-pendente").close();
+      } catch (erro) {
+        alert(erro.message);
+      }
+    });
+    $("popup-vincular-pendente").showModal();
   }));
 }
 

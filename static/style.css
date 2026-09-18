@@ -156,6 +156,8 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .potes-adicionais label { display: flex; gap: 4px; align-items: center; font-size: 12px; }
 .filtros-cadastro { margin-top: 10px; margin-bottom: 0; }
 .config-sheets { display: grid; gap: 8px; margin-bottom: 10px; }
+.resultados-vinculo { display: grid; gap: 6px; margin-top: 8px; }
+.resultado-vinculo { text-align: left; font-size: 13px; }
 .atalho-cadastro, .atalho-cadastro-sexo { padding: 7px 10px; border-radius: 999px; color: var(--texto-suave); }
 .atalho-cadastro.ativo, .atalho-cadastro-sexo.ativo { background: var(--acento); border-color: var(--acento); color: #fff; font-weight: 600; }
 

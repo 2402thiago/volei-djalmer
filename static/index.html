@@ -32,6 +32,15 @@
     </div>
   </dialog>
 
+  <dialog id="popup-vincular-pendente" class="popup-casais">
+    <div class="cabecalho-popup">
+      <h2>Vincular a cadastro</h2>
+      <button id="btn-fechar-vinculo-pendente" class="fechar-popup" aria-label="Fechar">&times;</button>
+    </div>
+    <input id="busca-vinculo-pendente" type="text" placeholder="Buscar atleta cadastrado" maxlength="80" />
+    <div id="resultados-vinculo-pendente" class="resultados-vinculo"></div>
+  </dialog>
+
   <!-- Navegação inferior -->
   <nav class="abas">
     <button data-tela="dashboard" class="aba ativa">Times</button>
@@ -142,8 +151,10 @@
         <div class="linha cadastro-linha">
           <input id="cadastro-alias" type="text" placeholder="Nome alternativo" maxlength="80" />
           <select id="cadastro-alvo" title="Atleta cadastrado"></select>
+          <button id="btn-cadastro-buscar" class="secundario">Buscar</button>
           <button id="btn-cadastro-vincular" class="secundario">Vincular nome</button>
         </div>
+        <div id="resultados-busca-cadastro" class="resultados-vinculo"></div>
         <p id="msg-vinculo" class="msg"></p>
       </div>
       <div class="card">
