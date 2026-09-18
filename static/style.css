@@ -158,6 +158,13 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .config-sheets { display: grid; gap: 8px; margin-bottom: 10px; }
 .resultados-vinculo { display: grid; gap: 6px; margin-top: 8px; }
 .resultado-vinculo { text-align: left; font-size: 13px; }
+.progresso-tarefa { position: fixed; z-index: 20; right: max(16px, calc((100vw - 520px) / 2 + 16px)); bottom: 82px; width: min(360px, calc(100% - 32px)); padding: 14px; border-radius: var(--raio); background: var(--card); box-shadow: 0 12px 32px rgba(20, 24, 40, 0.22); }
+.progresso-tarefa .cabecalho-popup { margin-bottom: 4px; }
+.progresso-tarefa.minimizado { width: auto; padding: 10px 14px; }
+.progresso-tarefa.minimizado #etapa-progresso, .progresso-tarefa.minimizado .barra-progresso { display: none; }
+.barra-progresso { height: 5px; overflow: hidden; border-radius: 999px; background: var(--acento-suave); margin-top: 10px; }
+.barra-progresso span { display: block; width: 45%; height: 100%; border-radius: inherit; background: var(--acento); animation: progresso 1.1s ease-in-out infinite alternate; }
+@keyframes progresso { from { transform: translateX(-30%); } to { transform: translateX(150%); } }
 .atalho-cadastro, .atalho-cadastro-sexo { padding: 7px 10px; border-radius: 999px; color: var(--texto-suave); }
 .atalho-cadastro.ativo, .atalho-cadastro-sexo.ativo { background: var(--acento); border-color: var(--acento); color: #fff; font-weight: 600; }
 

@@ -108,6 +108,15 @@ if (!Array.isArray(casaisAtivos) || casaisAtivos.length !== casaisConfigurados.l
 
 const normalizarNome = (nome) => String(nome || "")
   .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+const nomePoteSorteio = (pote) => ({ M2F2: "M2/F2", levantadores: "LM1/LF1" }[pote] || pote);
+const correspondeFiltroPote = (p, filtro) => {
+  const pote = p.pote_sorteio || p.nivel;
+  if (!filtro) return true;
+  if (filtro === "M2") return pote === "M2" || pote === "M2F2";
+  if (filtro === "F2") return pote === "M2F2";
+  if (filtro === "LM1" || filtro === "LF1") return pote === "levantadores";
+  return pote === filtro;
+};
 
 const NIVEIS = ["C1", "M1", "M2", "F1", "F2", "LM1", "LF1"];
 const STORAGE_CADASTRO = "volei.cadastro.atletas.v1";
@@ -154,6 +163,38 @@ async function executarSheets(acao) {
   try { return await acao(); } catch (erro) { mensagemSheets(erro.message, true); return null; }
 }
 
+let tarefaEmAndamento = false;
+
+async function executarComProgresso(titulo, acao) {
+  if (tarefaEmAndamento) return;
+  tarefaEmAndamento = true;
+  const painel = $("progresso-tarefa");
+  const etapa = $("etapa-progresso");
+  painel.hidden = false;
+  painel.classList.remove("minimizado");
+  $("titulo-progresso").textContent = titulo;
+  $("btn-fechar-progresso").hidden = true;
+  etapa.className = "msg";
+  etapa.textContent = "Preparando operação...";
+  try {
+    const resultado = await acao((mensagem) => { etapa.textContent = mensagem; });
+    etapa.textContent = resultado || "Operação concluída.";
+    $("btn-fechar-progresso").hidden = false;
+  } catch (erro) {
+    etapa.textContent = erro.message;
+    etapa.className = "msg erro";
+    $("btn-fechar-progresso").hidden = false;
+  } finally {
+    tarefaEmAndamento = false;
+  }
+}
+
+$("btn-minimizar-progresso").addEventListener("click", (event) => { event.stopPropagation(); $("progresso-tarefa").classList.add("minimizado"); });
+$("progresso-tarefa").addEventListener("click", () => {
+  if ($("progresso-tarefa").classList.contains("minimizado")) $("progresso-tarefa").classList.remove("minimizado");
+});
+$("btn-fechar-progresso").addEventListener("click", (event) => { event.stopPropagation(); $("progresso-tarefa").hidden = true; });
+
 $("btn-conectar-sheets").addEventListener("click", () => executarSheets(async () => {
   if (!confirm("Conectar apagará todas as abas e dados atuais da planilha Google e criará a aba Nivelamento. Deseja continuar?")) return;
   await api.enviar("/api/nivelamento/conectar", "POST", salvarCredenciaisDaSessao());
@@ -169,20 +210,29 @@ $("btn-desconectar-sheets").addEventListener("click", () => {
   $("sheets-credencial-site").value = "";
   mensagemSheets("Google Sheets desconectado neste navegador.");
 });
-$("btn-sincronizar-sheets").addEventListener("click", () => executarSheets(async () => {
+$("btn-sincronizar-sheets").addEventListener("click", () => executarComProgresso("Sincronizando Cadastro", async (etapa) => {
   if (!sheetsConectado) throw new Error("Conecte o Google Sheets antes de sincronizar.");
+  etapa("Enviando novos atletas para a planilha...");
   const resposta = await api.enviar("/api/nivelamento/sincronizar", "POST", { ...payloadCadastro(), ...salvarCredenciaisDaSessao() });
-  mensagemSheets(`${resposta.adicionados} novos e ${resposta.atualizados} atualizados na planilha.`);
+  const mensagem = `${resposta.adicionados} novos atletas enviados para a planilha.`;
+  mensagemSheets(mensagem);
+  return mensagem;
 }));
-$("btn-importar-sheets").addEventListener("click", () => executarSheets(async () => {
-  if (!sheetsConectado) throw new Error("Conecte o Google Sheets antes de importar.");
+$("btn-importar-sheets").addEventListener("click", () => {
   if (!confirm("Importar substituirá o Cadastro local pelos dados da planilha. Deseja continuar?")) return;
-  const resposta = await api.enviar("/api/nivelamento/importar", "POST", salvarCredenciaisDaSessao());
-  cadastroAtletas = resposta.atletas.sort((a, b) => a.ordem - b.ordem).map(({ ordem, atualizado_em, ...atleta }) => atleta);
-  salvarCadastro();
-  renderCadastro();
-  mensagemSheets(`${cadastroAtletas.length} atletas importados do Google Sheets.`);
-}));
+  executarComProgresso("Importando Cadastro", async (etapa) => {
+    if (!sheetsConectado) throw new Error("Conecte o Google Sheets antes de importar.");
+    etapa("Lendo a lista única de nivelamento...");
+    const resposta = await api.enviar("/api/nivelamento/importar", "POST", salvarCredenciaisDaSessao());
+    cadastroAtletas = resposta.atletas.sort((a, b) => a.ordem - b.ordem).map(({ ordem, atualizado_em, ...atleta }) => atleta);
+    salvarCadastro();
+    renderCadastro();
+    limparTimesEPresenca();
+    const mensagem = `${cadastroAtletas.length} atletas importados. Times e presença anteriores foram limpos.`;
+    mensagemSheets(mensagem);
+    return mensagem;
+  });
+});
 
 function carregarCadastro() {
   try { cadastroAtletas = JSON.parse(localStorage.getItem(STORAGE_CADASTRO) || "[]"); } catch { cadastroAtletas = []; }
@@ -215,12 +265,34 @@ function atualizarParticipantesDoCadastro() {
     participante.nivel = atleta.pote || null;
     participante.ranking = cadastroAtletas.indexOf(atleta) + 1;
     participante.potes_adicionais = atleta.potesAdicionais;
+    delete participante.pote_sorteio;
+    delete participante.promovido_de;
     participante.atualizado_em = new Date().toISOString();
     atualizados += 1;
   });
   salvarParticipantesLocais();
   renderParticipantes();
   return atualizados;
+}
+
+function aplicarPotesDoSorteio() {
+  const ativos = participantes.filter((p) => p.status === "ativo");
+  if (ativos.length !== 24) throw new Error(`É necessário ter exatamente 24 atletas ativos. Atual: ${ativos.length}.`);
+  const pendencias = ativos.filter((p) => !p.cadastro_id || !p.sexo || !p.nivel);
+  if (pendencias.length) throw new Error(`Atletas pendentes de cadastro ou nivelamento: ${pendencias.map((p) => p.nome).join(", ")}.`);
+  const atribuicoes = calcularAtribuicaoPotes(ativos);
+  ativos.forEach((p) => { p.pote_sorteio = atribuicoes.get(p.id); });
+  salvarParticipantesLocais();
+  renderParticipantes();
+}
+
+function limparTimesEPresenca() {
+  localStorage.removeItem(STORAGE_TIMES);
+  localStorage.removeItem(STORAGE_PRESENCA);
+  times = [];
+  presenca = { assinatura: "", atletas: {}, ordem: [] };
+  renderTimes();
+  renderPresenca();
 }
 
 function buscarCadastro(termo) {
@@ -506,7 +578,7 @@ function renderParticipantes() {
   renderResumoParticipantes();
   const exibidos = participantes.filter((p) => (
     (!filtrosParticipantes.sexo || p.sexo === filtrosParticipantes.sexo) &&
-    (!filtrosParticipantes.nivel || p.nivel === filtrosParticipantes.nivel)
+    correspondeFiltroPote(p, filtrosParticipantes.nivel)
   )).sort((a, b) => {
     if (!filtrosParticipantes.nivel) return 0;
     return (a.ranking || Number.MAX_SAFE_INTEGER) - (b.ranking || Number.MAX_SAFE_INTEGER);
@@ -524,7 +596,7 @@ function renderParticipantes() {
     item.innerHTML = `
       <div>
         <div class="nome">${esc(p.nome)}</div>
-        <div class="det">${pendente ? "Não cadastrado no nivelamento" : `${p.sexo || "Sexo não definido"} · ${p.nivel || "Pote não definido"} · posição geral ${p.ranking || "não definida"}`}</div>
+        <div class="det">${pendente ? "Não cadastrado no nivelamento" : `${p.sexo || "Sexo não definido"} · ${nomePoteSorteio(p.pote_sorteio || p.nivel) || "Pote não definido"} · posição geral ${p.ranking || "não definida"}`}</div>
       </div>${pendente ? `<div class="linha linha-acoes"><button class="secundario" data-adicionar-pendente="${p.id}">Adicionar ao Cadastro</button><button class="secundario" data-vincular-pendente="${p.id}">Vincular a cadastro existente</button></div>` : ""}`;
     lista.appendChild(item);
   });
@@ -558,20 +630,20 @@ function renderParticipantes() {
 function renderResumoParticipantes() {
   const resumo = $("resumo-niveis");
   if (!resumo) return;
-  const niveis = ["C1", "M1", "M2", "F1", "F2", "LM1", "LF1"];
+  const niveis = ["C1", "M1", "F1", "M2", "M2F2", "levantadores"];
   const ativos = participantes.filter((p) => p.status === "ativo");
   const linhas = [...niveis, "Sem nível"];
   const contar = (nivel, sexo) => ativos.filter((p) =>
-    (nivel === "__total__" || (nivel === "Sem nível" ? !p.nivel : p.nivel === nivel)) && p.sexo === sexo
+    (nivel === "__total__" || (nivel === "Sem nível" ? !p.nivel : (p.pote_sorteio || p.nivel) === nivel)) && p.sexo === sexo
   ).length;
   const contarSemGenero = (nivel) => ativos.filter((p) =>
-    (nivel === "Sem nível" ? !p.nivel : p.nivel === nivel) && !p.sexo
+    (nivel === "Sem nível" ? !p.nivel : (p.pote_sorteio || p.nivel) === nivel) && !p.sexo
   ).length;
   const celulas = linhas.map((nivel) => {
     const feminino = contar(nivel, "F");
     const masculino = contar(nivel, "M");
     const semGenero = contarSemGenero(nivel);
-    return `<tr><th scope="row">${nivel}</th><td>${feminino}</td><td>${masculino}</td><td>${semGenero}</td><td>${feminino + masculino + semGenero}</td></tr>`;
+    return `<tr><th scope="row">${nomePoteSorteio(nivel)}</th><td>${feminino}</td><td>${masculino}</td><td>${semGenero}</td><td>${feminino + masculino + semGenero}</td></tr>`;
   }).join("");
   const totalF = contar("__total__", "F");
   const totalM = contar("__total__", "M");
@@ -595,12 +667,12 @@ function salvarRankingDoNivel() {
 }
 
 function gerarMensagemParticipantes() {
-  const ordemNiveis = ["C1", "M1", "M2", "F1", "F2", "LM1", "LF1"];
+  const ordemNiveis = ["C1", "M1", "F1", "M2", "M2F2", "levantadores"];
   const ativos = participantes.filter((p) => p.status === "ativo");
   const grupos = ordemNiveis.map((nivel) => ({
     nivel,
     atletas: ativos
-      .filter((p) => p.nivel === nivel)
+      .filter((p) => (p.pote_sorteio || p.nivel) === nivel)
       .sort((a, b) => (a.ranking || Number.MAX_SAFE_INTEGER) - (b.ranking || Number.MAX_SAFE_INTEGER)),
   })).filter((grupo) => grupo.atletas.length);
   const semNivel = ativos
@@ -608,7 +680,7 @@ function gerarMensagemParticipantes() {
     .sort((a, b) => (a.ranking || Number.MAX_SAFE_INTEGER) - (b.ranking || Number.MAX_SAFE_INTEGER));
 
   const secoes = grupos.map((grupo) => [
-    `*${grupo.nivel}*`,
+    `*${nomePoteSorteio(grupo.nivel)}*`,
     ...grupo.atletas.map((p, index) => `${index + 1}. ${p.nome}`),
   ].join("\n"));
   if (semNivel.length) {
@@ -659,11 +731,17 @@ $("btn-compartilhar").addEventListener("click", async () => {
   window.open(`https://wa.me/?text=${encodeURIComponent(mensagem)}`, "_blank");
 });
 
-$("btn-atualizar-lista").addEventListener("click", () => {
-  const atualizados = atualizarParticipantesDoCadastro();
-  $("msg-importar").textContent = `${atualizados} atleta(s) atualizados com os dados do Cadastro.`;
-  $("msg-importar").className = "msg";
-});
+$("btn-atualizar-lista").addEventListener("click", () => executarComProgresso("Atualizando lista", async (etapa) => {
+    etapa("Atualizando atletas pelo Cadastro permanente...");
+    const atualizados = atualizarParticipantesDoCadastro();
+    etapa("Validando vagas obrigatórias dos potes...");
+    aplicarPotesDoSorteio();
+    limparTimesEPresenca();
+    const mensagem = `${atualizados} atleta(s) atualizados e potes do sorteio validados. Times e presença anteriores foram limpos.`;
+    $("msg-importar").textContent = mensagem;
+    $("msg-importar").className = "msg";
+    return mensagem;
+}));
 
 document.querySelectorAll(".atalho-nivel").forEach((botao) => {
   botao.addEventListener("click", () => {
@@ -801,7 +879,7 @@ function renderTimes() {
     const ul = card.querySelector(".jogadores");
     t.jogadores.forEach((p) => {
       const li = document.createElement("li");
-      li.innerHTML = `<span>${esc(p.nome)}</span><span class="pilha-nivel">${p.nivel || "-"}</span>`;
+      li.innerHTML = `<span>${esc(p.nome)}</span><span class="pilha-nivel">${nomePoteSorteio(p.pote_sorteio || p.nivel) || "-"}</span>`;
       ul.appendChild(li);
     });
   });
@@ -833,6 +911,49 @@ $('btn-compartilhar-times').addEventListener("click", async () => {
   window.open(`https://wa.me/?text=${encodeURIComponent(mensagem)}`, "_blank");
 });
 
+function calcularAtribuicaoPotes(ativos) {
+  const metas = { C1: 4, M1: 4, F1: 4, M2: 4, M2F2: 4, levantadores: 4 };
+  const categoriaDoPote = (pote) => {
+    if (pote === "LM1" || pote === "LF1") return "levantadores";
+    if (pote === "F2") return "M2F2";
+    return pote;
+  };
+  const opcoes = new Map(ativos.map((p) => {
+    const potes = [p.nivel, ...p.potes_adicionais].filter(Boolean);
+    const categorias = potes.flatMap((pote) => categoriaDoPote(pote) === "M2" ? ["M2", "M2F2"] : [categoriaDoPote(pote)]);
+    return [p.id, [...new Set(categorias)]];
+  }));
+  const ordenados = [...ativos].sort((a, b) => opcoes.get(a.id).length - opcoes.get(b.id).length || a.ranking - b.ranking);
+  const contagens = Object.fromEntries(Object.keys(metas).map((categoria) => [categoria, 0]));
+  const atribuicoes = new Map();
+  let tentativas = 0;
+
+  const buscar = (indice) => {
+    if (++tentativas > 100000) return false;
+    const restantes = ordenados.slice(indice);
+    if (Object.entries(metas).some(([categoria, meta]) => contagens[categoria] > meta || contagens[categoria] + restantes.filter((p) => opcoes.get(p.id).includes(categoria)).length < meta)) return false;
+    if (indice === ordenados.length) return Object.entries(metas).every(([categoria, meta]) => contagens[categoria] === meta);
+    const atleta = ordenados[indice];
+    const categoriaPrincipal = categoriaDoPote(atleta.nivel);
+    const opcoesOrdenadas = [...opcoes.get(atleta.id)].sort((a, b) => (a === categoriaPrincipal ? -1 : 0) - (b === categoriaPrincipal ? -1 : 0));
+    return opcoesOrdenadas.some((categoria) => {
+      if (contagens[categoria] >= metas[categoria]) return false;
+      atribuicoes.set(atleta.id, categoria);
+      contagens[categoria] += 1;
+      if (buscar(indice + 1)) return true;
+      contagens[categoria] -= 1;
+      atribuicoes.delete(atleta.id);
+      return false;
+    });
+  };
+
+  if (!buscar(0)) {
+    const diagnostico = Object.keys(metas).map((categoria) => `${categoria}: ${ativos.filter((p) => opcoes.get(p.id).includes(categoria)).length} atleta(s) habilitado(s), mínimo ${metas[categoria]}`);
+    throw new Error(`Não foi possível encontrar uma composição válida dos potes autorizados.\n${diagnostico.join("\n")}`);
+  }
+  return atribuicoes;
+}
+
 function montarTimesLocais() {
   atualizarParticipantesDoCadastro();
   const ativos = participantes.filter((p) => p.status === "ativo");
@@ -852,66 +973,14 @@ function montarTimesLocais() {
   ativos.filter((p) => !p.sexo).forEach((p) => problemas.push(`- ${p.nome}: sexo não definido no Cadastro.`));
   if (problemas.length) throw new Error(`Não foi possível sortear os times.\n${problemas.join("\n")}`);
 
-  const forcaNivel = { C1: 7, M1: 6, M2: 5, F1: 4, F2: 3, LM1: 2, LF1: 1 };
-  const normalizarOpcaoPote = (pote) => (pote === "LM1" || pote === "LF1" ? "levantadores" : (pote === "F2" ? "M2F2" : pote));
-  const opcoesDePote = new Map(ativos.map((p) => [p.id, [p.nivel, ...p.potes_adicionais.filter((pote) => pote !== p.nivel)].map(normalizarOpcaoPote).filter((pote, indice, lista) => lista.indexOf(pote) === indice)]));
-  const metasPotes = { C1: 4, M1: 4, F1: 4, M2: 4, M2F2: 4, levantadores: 4 };
-  const contagens = { C1: 0, M1: 0, F1: 0, M2: 0, M2F2: 0, levantadores: 0 };
-  const ordenadosParaPote = [...ativos].sort((a, b) => opcoesDePote.get(a.id).length - opcoesDePote.get(b.id).length || a.ranking - b.ranking);
-  let tentativasDePote = 0;
-
-  const atribuicaoValida = (indice) => {
-    if (++tentativasDePote > 100000) return false;
-    const restantes = ordenadosParaPote.slice(indice);
-    if (Object.entries(metasPotes).some(([pote, meta]) => contagens[pote] > meta || contagens[pote] + restantes.filter((p) => opcoesDePote.get(p.id).some((opcao) => opcao === pote || (pote === "M2F2" && opcao === "M2"))).length < meta)) return false;
-    if (indice === ordenadosParaPote.length) {
-      return Object.entries(metasPotes).every(([pote, meta]) => contagens[pote] === meta);
-    }
-    const atleta = ordenadosParaPote[indice];
-    const opcoes = [...opcoesDePote.get(atleta.id)].map((pote) => pote === "M2" ? ["M2", "M2F2"] : pote).flat().filter((pote, indice, lista) => lista.indexOf(pote) === indice).sort((a, b) => {
-      const principalA = a === atleta.pote_principal ? 0 : 1;
-      const principalB = b === atleta.pote_principal ? 0 : 1;
-      return principalA - principalB || (potesObrigatorios.includes(a) ? -1 : 1) - (potesObrigatorios.includes(b) ? -1 : 1);
-    });
-    return opcoes.some((pote) => {
-      atleta.nivel = pote;
-      const categoria = pote === "M2" && contagens.M2 >= metasPotes.M2 ? "M2F2" : pote;
-      if (!metasPotes[categoria] || contagens[categoria] >= metasPotes[categoria]) return false;
-      contagens[categoria] += 1;
-      atleta.pote_sorteio = categoria;
-      if (atribuicaoValida(indice + 1)) return true;
-      contagens[categoria] -= 1;
-      atleta.nivel = atleta.pote_principal;
-      atleta.pote_sorteio = null;
-      return false;
-    });
-  };
-
-  ativos.forEach((p) => { p.pote_principal = p.nivel; });
-  if (!atribuicaoValida(0)) {
-    const diagnostico = potesObrigatorios.map((pote) => {
-      const principais = ativos.filter((p) => p.pote_principal === pote).length;
-      const habilitados = ativos.filter((p) => opcoesDePote.get(p.id).includes(pote)).length;
-      return `${pote}: ${principais} principal(is), ${habilitados} habilitado(s)`;
-    });
-    throw new Error(`Não foi possível encontrar uma combinação válida dos potes autorizados.\n${diagnostico.join("\n")}`);
-  }
-  ativos.forEach((p) => { if (p.nivel !== p.pote_principal) p.promovido_de = p.pote_principal; });
+  const atribuicoes = calcularAtribuicaoPotes(ativos);
+  ativos.forEach((p) => {
+    p.pote_sorteio = atribuicoes.get(p.id);
+    p.promovido_de = p.pote_sorteio === p.nivel || (p.nivel === "M2" && p.pote_sorteio === "M2F2") || ((p.nivel === "LM1" || p.nivel === "LF1") && p.pote_sorteio === "levantadores") ? null : p.nivel;
+  });
   const forcaGlobal = (p) => ativos.length - p.ranking + 1;
-  const potes = ["C1", "M1", "F1"].map((nivel) =>
-    ativos.filter((p) => p.pote_sorteio === nivel).sort((a, b) => a.ranking - b.ranking)
-  );
-  const m2f2 = ativos
-    .filter((p) => p.pote_sorteio === "M2" || p.pote_sorteio === "M2F2")
-    .sort((a, b) => forcaNivel[b.nivel] - forcaNivel[a.nivel] || a.ranking - b.ranking);
-  if (m2f2.length !== 8) throw new Error(`Não foi possível sortear os times.\nO conjunto M2 + F2 precisa preencher 8 vagas. Quantidade atribuída: ${m2f2.length}.`);
-  potes.push(m2f2);
-  const levantadores = ativos
-    .filter((p) => p.pote_sorteio === "levantadores")
-    .sort((a, b) => a.ranking - b.ranking);
-  potes.push(levantadores);
-  const faltantes = ["C1", "M1", "F1"].filter((nivel, index) => potes[index].length < 4);
-  if (faltantes.length) throw new Error(`Não foi possível sortear os times.\nPotes com menos de 4 atletas: ${faltantes.join(", ")}.`);
+  const categoriasSorteio = ["C1", "M1", "F1", "M2", "M2F2", "levantadores"];
+  const potes = categoriasSorteio.map((categoria) => ativos.filter((p) => p.pote_sorteio === categoria).sort((a, b) => a.ranking - b.ranking));
   const novos = [0, 1, 2, 3].map((indice) => ({ id: novoId(), nome: `Time ${indice + 1}`, jogadores: [], nivel_medio: "0.00" }));
   if (!sorteioComCasais) {
     potes.forEach((pote) => {
@@ -933,14 +1002,12 @@ function montarTimesLocais() {
     });
     ativos.filter((p) => !usados.has(p.id)).forEach((p) => unidades.push([p]));
     const categoria = (p) => {
-      if (p.pote_sorteio === "M2F2") return "M2F2";
-      if (p.pote_sorteio === "levantadores") return "levantadores";
       return p.pote_sorteio;
     };
     const embaralhar = (itens) => [...itens].sort(() => Math.random() - 0.5);
-    const grupos = ["C1", "M1", "F1", "M2F2", "levantadores"];
-    const metas = Object.fromEntries(grupos.map((grupo) => [grupo, Array(4).fill(4)]));
-    const distribuicao = novos.map(() => ({ C1: 0, M1: 0, F1: 0, M2F2: 0, levantadores: 0 }));
+    const grupos = ["C1", "M1", "F1", "M2", "M2F2", "levantadores"];
+    const metas = Object.fromEntries(grupos.map((grupo) => [grupo, Array(4).fill(1)]));
+    const distribuicao = novos.map(() => ({ C1: 0, M1: 0, F1: 0, M2: 0, M2F2: 0, levantadores: 0 }));
     unidades.sort((a, b) => b.length - a.length || b.reduce((s, p) => s + forcaGlobal(p), 0) - a.reduce((s, p) => s + forcaGlobal(p), 0));
     let tentativas = 0;
     const distribuir = (indice) => {
@@ -977,7 +1044,7 @@ function montarTimesLocais() {
     throw new Error(`Não foi possível sortear os times.\nDistribuição final: ${novos.map((time) => `${time.nome}: ${time.jogadores.length} atletas`).join(", ")}.`);
   }
   novos.forEach((time) => {
-    time.jogadores.sort((a, b) => forcaNivel[b.nivel] - forcaNivel[a.nivel] || a.ranking - b.ranking);
+    time.jogadores.sort((a, b) => a.ranking - b.ranking);
     time.nivel_medio = (time.jogadores.reduce((sum, p) => sum + forcaGlobal(p), 0) / 6).toFixed(2);
   });
   return novos;

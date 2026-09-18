@@ -81,16 +81,14 @@ class SheetsNivelamento:
         valores = worksheet.get_all_values()
         existentes = {linha[0]: indice for indice, linha in enumerate(valores[1:], start=2) if linha}
         adicionados = 0
-        atualizados = 0
         for atleta in atletas:
             linha = [atleta.get("id", ""), atleta.get("nome", ""), atleta.get("sexo", ""), atleta.get("pote", ""), json.dumps(atleta.get("potesAdicionais", []), ensure_ascii=False), json.dumps(atleta.get("aliases", []), ensure_ascii=False), str(atleta.get("ordem", 0)), atleta.get("atualizado_em", "")]
             if atleta.get("id") in existentes:
-                worksheet.update(f"A{existentes[atleta['id']]}:H{existentes[atleta['id']]}", [linha], value_input_option="RAW")
-                atualizados += 1
+                continue
             else:
                 worksheet.append_row(linha, value_input_option="RAW")
                 adicionados += 1
-        return {"adicionados": adicionados, "atualizados": atualizados}
+        return {"adicionados": adicionados}
 
     def importar(self) -> list[dict]:
         valores = self._worksheet().get_all_values()

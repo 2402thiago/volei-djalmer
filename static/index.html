@@ -41,6 +41,18 @@
     <div id="resultados-vinculo-pendente" class="resultados-vinculo"></div>
   </dialog>
 
+  <aside id="progresso-tarefa" class="progresso-tarefa" hidden aria-live="polite">
+    <div class="cabecalho-popup">
+      <h2 id="titulo-progresso">Processando</h2>
+      <div>
+        <button id="btn-minimizar-progresso" class="fechar-popup" aria-label="Minimizar">_</button>
+        <button id="btn-fechar-progresso" class="fechar-popup" aria-label="Fechar" hidden>&times;</button>
+      </div>
+    </div>
+    <p id="etapa-progresso" class="msg">Preparando operação...</p>
+    <div class="barra-progresso"><span></span></div>
+  </aside>
+
   <!-- Navegação inferior -->
   <nav class="abas">
     <button data-tela="dashboard" class="aba ativa">Times</button>
