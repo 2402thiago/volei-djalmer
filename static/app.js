@@ -105,7 +105,6 @@ const STORAGE_SHEETS_CONECTADO = "volei.sheets.conectado.v1";
 let cadastroAtletas = [];
 let sheetsConectado = localStorage.getItem(STORAGE_SHEETS_CONECTADO) === "true";
 const filtrosCadastro = { nivel: "", sexo: "" };
-const ORDEM_CADASTRO = ["C1", "M1", "F1", "M2", "F2", "LM1", "LF1"];
 
 function salvarCadastro() { localStorage.setItem(STORAGE_CADASTRO, JSON.stringify(cadastroAtletas)); }
 
@@ -204,7 +203,7 @@ function renderCadastro() {
   }
   const exibidos = cadastroAtletas
     .filter((atleta) => (!filtrosCadastro.nivel || atleta.pote === filtrosCadastro.nivel || atleta.potesAdicionais.includes(filtrosCadastro.nivel)) && (!filtrosCadastro.sexo || atleta.sexo === filtrosCadastro.sexo))
-    .sort((a, b) => ((ORDEM_CADASTRO.indexOf(a.pote) < 0 ? ORDEM_CADASTRO.length : ORDEM_CADASTRO.indexOf(a.pote)) - (ORDEM_CADASTRO.indexOf(b.pote) < 0 ? ORDEM_CADASTRO.length : ORDEM_CADASTRO.indexOf(b.pote))) || (cadastroAtletas.indexOf(a) - cadastroAtletas.indexOf(b)));
+    .sort((a, b) => cadastroAtletas.indexOf(a) - cadastroAtletas.indexOf(b));
   exibidos.forEach((atleta, indice) => {
     const item = document.createElement("div");
     item.className = "atleta-cadastro";
