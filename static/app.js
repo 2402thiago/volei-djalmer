@@ -102,6 +102,8 @@ const normalizarNome = (nome) => String(nome || "")
 const NIVEIS = ["C1", "M1", "M2", "F1", "F2", "LM1", "LF1"];
 const STORAGE_CADASTRO = "volei.cadastro.atletas.v1";
 let cadastroAtletas = [];
+const filtrosCadastro = { nivel: "", sexo: "" };
+const ORDEM_CADASTRO = ["C1", "M1", "F1", "M2", "F2", "LM1", "LF1"];
 
 function salvarCadastro() { localStorage.setItem(STORAGE_CADASTRO, JSON.stringify(cadastroAtletas)); }
 
@@ -149,7 +151,10 @@ function renderCadastro() {
     lista.innerHTML = '<div class="card">Nenhum atleta cadastrado.</div>';
     return;
   }
-  cadastroAtletas.forEach((atleta, indice) => {
+  const exibidos = cadastroAtletas
+    .filter((atleta) => (!filtrosCadastro.nivel || atleta.pote === filtrosCadastro.nivel) && (!filtrosCadastro.sexo || atleta.sexo === filtrosCadastro.sexo))
+    .sort((a, b) => ((ORDEM_CADASTRO.indexOf(a.pote) < 0 ? ORDEM_CADASTRO.length : ORDEM_CADASTRO.indexOf(a.pote)) - (ORDEM_CADASTRO.indexOf(b.pote) < 0 ? ORDEM_CADASTRO.length : ORDEM_CADASTRO.indexOf(b.pote))) || (cadastroAtletas.indexOf(a) - cadastroAtletas.indexOf(b)));
+  exibidos.forEach((atleta, indice) => {
     const item = document.createElement("div");
     item.className = "atleta-cadastro";
     item.draggable = true;
@@ -169,6 +174,18 @@ function renderCadastro() {
   }));
   configurarArrasteCadastro(lista);
 }
+
+document.querySelectorAll("[data-cadastro-nivel]").forEach((botao) => botao.addEventListener("click", () => {
+  filtrosCadastro.nivel = botao.dataset.cadastroNivel;
+  document.querySelectorAll("[data-cadastro-nivel]").forEach((item) => item.classList.toggle("ativo", item === botao));
+  renderCadastro();
+}));
+
+document.querySelectorAll("[data-cadastro-sexo]").forEach((botao) => botao.addEventListener("click", () => {
+  filtrosCadastro.sexo = botao.dataset.cadastroSexo;
+  document.querySelectorAll("[data-cadastro-sexo]").forEach((item) => item.classList.toggle("ativo", item === botao));
+  renderCadastro();
+}));
 
 function atualizarCadastro(id, alteracoes) {
   const atleta = cadastroAtletas.find((item) => item.id === id);
