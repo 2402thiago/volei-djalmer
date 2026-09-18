@@ -833,6 +833,14 @@ function carregarPontos() {
 
 function timePorId(id) { return times.find((time) => time.id === id); }
 
+function nomearTimesPorC1(lista) {
+  lista.forEach((time, indice) => {
+    const c1 = time.jogadores.find((jogador) => jogador.pote_sorteio === "C1" || jogador.nivel === "C1");
+    if (c1?.nome) time.nome = `Time ${c1.nome}`;
+    else if (!time.nome || /^Time \d+$/.test(time.nome)) time.nome = `Time ${indice + 1}`;
+  });
+}
+
 function garantirTimesDaPartida() {
   if (!times.some((time) => time.id === partidaPontos.timeA)) partidaPontos.timeA = times[0]?.id || "";
   if (!times.some((time) => time.id === partidaPontos.timeB) || partidaPontos.timeB === partidaPontos.timeA) {
@@ -1056,6 +1064,8 @@ $("btn-limpar-dados").addEventListener("click", () => {
 
 async function carregarTimes() {
   try { times = JSON.parse(localStorage.getItem(STORAGE_TIMES) || "[]"); } catch { times = []; }
+  nomearTimesPorC1(times);
+  salvarTimesLocais();
   renderTimes();
   carregarPresenca();
   carregarPontos();
@@ -1212,6 +1222,7 @@ function criarTimesComRestricoes(ativos) {
     time.jogadores.sort((a, b) => a.ranking - b.ranking);
     time.nivel_medio = (time.jogadores.reduce((sum, p) => sum + forcaGlobal(p), 0) / 6).toFixed(2);
   });
+  nomearTimesPorC1(timesNovos);
   return { times: timesNovos, ausentes };
 }
 
