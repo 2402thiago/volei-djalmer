@@ -203,7 +203,7 @@ function renderCadastro() {
     return;
   }
   const exibidos = cadastroAtletas
-    .filter((atleta) => (!filtrosCadastro.nivel || atleta.pote === filtrosCadastro.nivel) && (!filtrosCadastro.sexo || atleta.sexo === filtrosCadastro.sexo))
+    .filter((atleta) => (!filtrosCadastro.nivel || atleta.pote === filtrosCadastro.nivel || atleta.potesAdicionais.includes(filtrosCadastro.nivel)) && (!filtrosCadastro.sexo || atleta.sexo === filtrosCadastro.sexo))
     .sort((a, b) => ((ORDEM_CADASTRO.indexOf(a.pote) < 0 ? ORDEM_CADASTRO.length : ORDEM_CADASTRO.indexOf(a.pote)) - (ORDEM_CADASTRO.indexOf(b.pote) < 0 ? ORDEM_CADASTRO.length : ORDEM_CADASTRO.indexOf(b.pote))) || (cadastroAtletas.indexOf(a) - cadastroAtletas.indexOf(b)));
   exibidos.forEach((atleta, indice) => {
     const item = document.createElement("div");
@@ -212,7 +212,7 @@ function renderCadastro() {
     item.dataset.cadastroId = atleta.id;
     const opcoes = NIVEIS.map((pote) => `<option value="${pote}" ${atleta.pote === pote ? "selected" : ""}>${pote}</option>`).join("");
     const adicionais = NIVEIS.filter((pote) => pote !== atleta.pote).map((pote) => `<label><input type="checkbox" data-pote-adicional="${pote}" ${atleta.potesAdicionais.includes(pote) ? "checked" : ""} />${pote}</label>`).join("");
-    item.innerHTML = `<div class="cabecalho-cadastro"><span>${indice + 1}. <input data-cadastro-nome value="${esc(atleta.nome)}" maxlength="80" /></span><span>Arraste</span></div><div class="linha"><select data-cadastro-sexo><option value="" ${!atleta.sexo ? "selected" : ""}>Sexo</option><option value="F" ${atleta.sexo === "F" ? "selected" : ""}>F</option><option value="M" ${atleta.sexo === "M" ? "selected" : ""}>M</option></select><select data-cadastro-pote><option value="">Pote principal</option>${opcoes}</select></div><div class="det-cadastro">Nomes vinculados: ${atleta.aliases.length ? atleta.aliases.map(esc).join(", ") : "nenhum"}</div><div class="potes-adicionais"><span class="det-cadastro">Também pode atuar em:</span>${adicionais}</div>`;
+    item.innerHTML = `<div class="cabecalho-cadastro"><span>${indice + 1}. <input data-cadastro-nome value="${esc(atleta.nome)}" maxlength="80" /></span><span>Arraste</span></div><div class="linha"><select data-cadastro-sexo><option value="" ${!atleta.sexo ? "selected" : ""}>Sexo</option><option value="F" ${atleta.sexo === "F" ? "selected" : ""}>F</option><option value="M" ${atleta.sexo === "M" ? "selected" : ""}>M</option></select><select data-cadastro-pote><option value="">Pote principal</option>${opcoes}</select></div><div class="det-cadastro">Pote principal: ${atleta.pote || "não definido"} · Também atua em: ${atleta.potesAdicionais.length ? atleta.potesAdicionais.join(", ") : "nenhum"}</div><div class="det-cadastro">Nomes vinculados: ${atleta.aliases.length ? atleta.aliases.map(esc).join(", ") : "nenhum"}</div><div class="potes-adicionais"><span class="det-cadastro">Permissões:</span>${adicionais}</div>`;
     lista.appendChild(item);
   });
   lista.querySelectorAll("[data-cadastro-nome]").forEach((input) => input.addEventListener("change", () => atualizarCadastro(input.closest("[data-cadastro-id]").dataset.cadastroId, { nome: input.value.trim() })));
