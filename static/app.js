@@ -182,6 +182,7 @@ async function executarComProgresso(titulo, acao) {
     painel.classList.add("concluido");
     $("titulo-progresso").textContent = `${titulo}: concluído`;
     $("btn-fechar-progresso").hidden = false;
+    setTimeout(() => { painel.hidden = true; }, 900);
   } catch (erro) {
     etapa.textContent = erro.message;
     etapa.className = "msg erro";
