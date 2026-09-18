@@ -54,7 +54,7 @@ function extrairTitulares(texto) {
     if (naLista) {
       const m = t.match(/^\d+\.\s*(.+?)(?:\s*✅)?$/);
       if (m) {
-        const nome = m[1].trim().replace(/^\(convidado\s+.+\)$/i, "");
+        const nome = m[1].trim().replace(/\s*[✅☑][\uFE0E\uFE0F]?\s*$/, "").replace(/^\(convidado\s+.+\)$/i, "");
         if (nome && !nome.startsWith("(")) titulares.push(nome);
       }
     }
@@ -204,7 +204,7 @@ function encontrarCadastro(nome) {
 }
 
 function migrarCadastroLegado() {
-  if (cadastroAtletas.length || !participantes.length) return;
+  if (cadastroAtletas.length || !participantes.length || !participantes.some((p) => NIVEIS.includes(p.nivel))) return;
   const forca = { C1: 7, M1: 6, M2: 5, F1: 4, F2: 3, LM1: 2, LF1: 1 };
   cadastroAtletas = [...participantes].sort((a, b) => forca[b.nivel] - forca[a.nivel] || (a.ranking || 0) - (b.ranking || 0)).map((p) => ({
     id: p.id,
@@ -270,6 +270,16 @@ function atualizarCadastro(id, alteracoes) {
   Object.assign(atleta, alteracoes);
   atleta.potesAdicionais = atleta.potesAdicionais.filter((pote) => pote !== atleta.pote);
   salvarCadastro(); renderCadastro();
+}
+
+function adicionarAtletaAoCadastro(nome) {
+  const existente = encontrarCadastro(nome);
+  if (existente) return existente;
+  const atleta = { id: novoId(), nome, sexo: "", pote: "", potesAdicionais: [], aliases: [] };
+  cadastroAtletas.push(atleta);
+  salvarCadastro();
+  renderCadastro();
+  return atleta;
 }
 
 function configurarArrasteCadastro(lista) {
@@ -430,13 +440,24 @@ function renderParticipantes() {
     const item = document.createElement("div");
     item.className = "item participante-item";
     item.draggable = false;
+    const pendente = !p.cadastro_id;
     item.innerHTML = `
       <div>
         <div class="nome">${esc(p.nome)}</div>
-      <div class="det">${p.sexo || "Sexo não definido"} · ${p.nivel || "Pote não definido"} · posição geral ${p.ranking || "não definida"}</div>
-      </div>`;
+        <div class="det">${pendente ? "Não cadastrado no nivelamento" : `${p.sexo || "Sexo não definido"} · ${p.nivel || "Pote não definido"} · posição geral ${p.ranking || "não definida"}`}</div>
+      </div>${pendente ? `<button class="secundario" data-adicionar-pendente="${p.id}">Adicionar ao Cadastro</button>` : ""}`;
     lista.appendChild(item);
   });
+  lista.querySelectorAll("[data-adicionar-pendente]").forEach((botao) => botao.addEventListener("click", () => {
+    const participante = participantes.find((p) => p.id === botao.dataset.adicionarPendente);
+    if (!participante) return;
+    const atleta = adicionarAtletaAoCadastro(participante.nome);
+    participante.id = atleta.id;
+    participante.cadastro_id = atleta.id;
+    participante.nome = atleta.nome;
+    salvarParticipantesLocais();
+    renderParticipantes();
+  }));
 }
 
 function renderResumoParticipantes() {
@@ -893,13 +914,12 @@ async function atualizarDados() {
     try {
       $("btn-confirmar-importar").disabled = true;
       $("msg-importar").textContent = "Importando e limpando lista anterior...";
-      const semCadastro = nomes.filter((nome) => !encontrarCadastro(nome));
-      if (semCadastro.length) throw new Error(`Nomes sem cadastro: ${semCadastro.join(", ")}. Cadastre ou vincule esses nomes antes de importar.`);
       const atletas = nomes.map((nome) => encontrarCadastro(nome));
-      const repetidos = atletas.filter((atleta, indice) => atletas.findIndex((item) => item.id === atleta.id) !== indice);
+      const repetidos = atletas.filter(Boolean).filter((atleta, indice, lista) => lista.findIndex((item) => item.id === atleta.id) !== indice);
       if (repetidos.length) throw new Error(`A lista contém nomes vinculados ao mesmo atleta: ${[...new Set(repetidos.map((atleta) => atleta.nome))].join(", ")}.`);
-      participantes = atletas.map((atleta) => ({
+      participantes = atletas.map((atleta, indice) => atleta ? ({
         id: atleta.id,
+        cadastro_id: atleta.id,
         nome: atleta.nome,
         sexo: atleta.sexo,
         nivel: atleta.pote || null,
@@ -908,9 +928,20 @@ async function atualizarDados() {
         status: "ativo",
         criado_em: new Date().toISOString(),
         atualizado_em: new Date().toISOString(),
+      }) : ({
+        id: novoId(),
+        cadastro_id: null,
+        nome: nomes[indice],
+        sexo: "",
+        nivel: null,
+        ranking: null,
+        status: "ativo",
+        criado_em: new Date().toISOString(),
+        atualizado_em: new Date().toISOString(),
       }));
       salvarParticipantesLocais();
-      $("msg-importar").textContent = `✅ ${nomes.length} importados localmente. Lista anterior removida.`;
+      const pendentes = participantes.filter((p) => !p.cadastro_id).length;
+      $("msg-importar").textContent = `✅ ${nomes.length} importados localmente.${pendentes ? ` ${pendentes} atleta(s) precisam ser adicionados ao Cadastro.` : ""} Lista anterior removida.`;
       $("msg-importar").className = "msg";
       $("whatsapp-texto").value = "";
       $("preview-importar").style.display = "none";
