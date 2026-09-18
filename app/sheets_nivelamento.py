@@ -12,11 +12,27 @@ HEADERS = ["id", "nome", "sexo", "pote", "potes_adicionais", "aliases", "ordem",
 class SheetsNivelamento:
     def __init__(self) -> None:
         self.sheet_id = os.getenv("GOOGLE_SHEETS_ID", "")
+        self.service_account_info = os.getenv("GOOGLE_SERVICE_ACCOUNT_INFO", "")
         self.client = None
 
     def configurar(self, sheet_id: str, service_account_info: str) -> None:
-        self.sheet_id = sheet_id.strip()
-        os.environ["GOOGLE_SERVICE_ACCOUNT_INFO"] = service_account_info.strip()
+        sheet_id = sheet_id.strip()
+        service_account_info = service_account_info.strip()
+        if sheet_id:
+            self.sheet_id = sheet_id
+        if not self.sheet_id:
+            raise ValueError("Informe o ID da planilha Google.")
+        if service_account_info:
+            try:
+                dados = json.loads(service_account_info)
+            except json.JSONDecodeError as exc:
+                raise ValueError("O JSON da conta de serviço é inválido.") from exc
+            obrigatorios = {"type", "client_email", "private_key"}
+            if not obrigatorios.issubset(dados):
+                raise ValueError("O JSON da conta de serviço não contém os campos obrigatórios.")
+            self.service_account_info = service_account_info
+        if not self.service_account_info and not os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", ""):
+            raise ValueError("Informe o JSON da conta de serviço.")
         self.client = None
 
     def _spreadsheet(self):
@@ -26,7 +42,7 @@ class SheetsNivelamento:
                 from google.oauth2.service_account import Credentials
             except ImportError as exc:
                 raise RuntimeError("Dependências do Google Sheets não instaladas.") from exc
-            info = os.getenv("GOOGLE_SERVICE_ACCOUNT_INFO")
+            info = self.service_account_info
             if info:
                 credentials = Credentials.from_service_account_info(json.loads(info), scopes=["https://www.googleapis.com/auth/spreadsheets"])
             else:

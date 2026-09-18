@@ -122,40 +122,59 @@ def cadastro_payload(payload: dict) -> list[dict]:
     return payload.get("atletas", [])
 
 
+def configurar_sheets(payload: dict) -> None:
+    sheets_nivelamento.configurar(payload.get("sheet_id", ""), payload.get("service_account_info", ""))
+
+
+def detalhe_sheets(exc: Exception) -> str:
+    mensagem = str(exc).strip()
+    resposta = getattr(exc, "response", None)
+    if resposta is not None:
+        try:
+            mensagem = resposta.json().get("error", {}).get("message", mensagem)
+        except Exception:
+            pass
+    if mensagem:
+        return mensagem
+    return "Não foi possível conectar ao Google Sheets. Confira o ID da planilha, a credencial e o compartilhamento com a conta de serviço."
+
+
 @app.post("/api/nivelamento/conectar")
 def conectar_nivelamento(payload: dict):
     try:
-        sheets_nivelamento.configurar(payload.get("sheet_id", ""), payload.get("service_account_info", ""))
+        configurar_sheets(payload)
         sheets_nivelamento.conectar_resetar()
         return {"ok": True, "mensagem": "Planilha preparada com a aba Nivelamento."}
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=detalhe_sheets(exc))
 
 
 @app.post("/api/nivelamento/testar")
 def testar_nivelamento(payload: dict):
     try:
-        sheets_nivelamento.configurar(payload.get("sheet_id", ""), payload.get("service_account_info", ""))
+        configurar_sheets(payload)
         sheets_nivelamento._spreadsheet()
         return {"ok": True, "mensagem": "Conexão com Google Sheets validada."}
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=detalhe_sheets(exc))
 
 
 @app.post("/api/nivelamento/sincronizar")
 def sincronizar_nivelamento(payload: dict):
     try:
+        configurar_sheets(payload)
         return {"ok": True, **sheets_nivelamento.sincronizar(cadastro_payload(payload))}
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=detalhe_sheets(exc))
 
 
-@app.get("/api/nivelamento/importar")
-def importar_nivelamento():
+@app.post("/api/nivelamento/importar")
+def importar_nivelamento(payload: dict):
     try:
+        configurar_sheets(payload)
         return {"ok": True, "atletas": sheets_nivelamento.importar()}
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=detalhe_sheets(exc))
 
 
 app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")

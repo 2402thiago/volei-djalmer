@@ -3,7 +3,7 @@
 const api = {
   async get(url) {
     const r = await fetch(url);
-    if (!r.ok) throw new Error(await r.text());
+    if (!r.ok) throw await erroApi(r);
     return r.json();
   },
   async enviar(url, method, body) {
@@ -12,10 +12,20 @@ const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body || {}),
     });
-    if (!r.ok) throw new Error(await r.text());
+    if (!r.ok) throw await erroApi(r);
     return r.json();
   },
 };
+
+async function erroApi(resposta) {
+  const texto = await resposta.text();
+  try {
+    const corpo = JSON.parse(texto);
+    return new Error(corpo.detail || texto);
+  } catch {
+    return new Error(texto || "Não foi possível concluir a operação.");
+  }
+}
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({
@@ -121,8 +131,22 @@ function credenciaisSheetsSite() {
   return { sheet_id: $("sheets-id-site").value.trim(), service_account_info: $("sheets-credencial-site").value.trim() };
 }
 
+function salvarCredenciaisDaSessao() {
+  const credenciais = credenciaisSheetsSite();
+  sessionStorage.setItem("volei.sheets.credenciais.v1", JSON.stringify(credenciais));
+  return credenciais;
+}
+
+function carregarCredenciaisDaSessao() {
+  try {
+    const credenciais = JSON.parse(sessionStorage.getItem("volei.sheets.credenciais.v1") || "{}");
+    $("sheets-id-site").value = credenciais.sheet_id || "";
+    $("sheets-credencial-site").value = credenciais.service_account_info || "";
+  } catch { /* Configuração da sessão inválida é descartada. */ }
+}
+
 $("btn-testar-sheets").addEventListener("click", () => executarSheets(async () => {
-  const resposta = await api.enviar("/api/nivelamento/testar", "POST", credenciaisSheetsSite());
+  const resposta = await api.enviar("/api/nivelamento/testar", "POST", salvarCredenciaisDaSessao());
   mensagemSheets(resposta.mensagem);
 }));
 
@@ -132,7 +156,7 @@ async function executarSheets(acao) {
 
 $("btn-conectar-sheets").addEventListener("click", () => executarSheets(async () => {
   if (!confirm("Conectar apagará todas as abas e dados atuais da planilha Google e criará a aba Nivelamento. Deseja continuar?")) return;
-  await api.enviar("/api/nivelamento/conectar", "POST", credenciaisSheetsSite());
+  await api.enviar("/api/nivelamento/conectar", "POST", salvarCredenciaisDaSessao());
   sheetsConectado = true;
   localStorage.setItem(STORAGE_SHEETS_CONECTADO, "true");
   mensagemSheets("Planilha conectada e preparada.");
@@ -140,17 +164,20 @@ $("btn-conectar-sheets").addEventListener("click", () => executarSheets(async ()
 $("btn-desconectar-sheets").addEventListener("click", () => {
   sheetsConectado = false;
   localStorage.removeItem(STORAGE_SHEETS_CONECTADO);
+  sessionStorage.removeItem("volei.sheets.credenciais.v1");
+  $("sheets-id-site").value = "";
+  $("sheets-credencial-site").value = "";
   mensagemSheets("Google Sheets desconectado neste navegador.");
 });
 $("btn-sincronizar-sheets").addEventListener("click", () => executarSheets(async () => {
   if (!sheetsConectado) throw new Error("Conecte o Google Sheets antes de sincronizar.");
-  const resposta = await api.enviar("/api/nivelamento/sincronizar", "POST", payloadCadastro());
+  const resposta = await api.enviar("/api/nivelamento/sincronizar", "POST", { ...payloadCadastro(), ...salvarCredenciaisDaSessao() });
   mensagemSheets(`${resposta.adicionados} novos e ${resposta.atualizados} atualizados na planilha.`);
 }));
 $("btn-importar-sheets").addEventListener("click", () => executarSheets(async () => {
   if (!sheetsConectado) throw new Error("Conecte o Google Sheets antes de importar.");
   if (!confirm("Importar substituirá o Cadastro local pelos dados da planilha. Deseja continuar?")) return;
-  const resposta = await api.get("/api/nivelamento/importar");
+  const resposta = await api.enviar("/api/nivelamento/importar", "POST", salvarCredenciaisDaSessao());
   cadastroAtletas = resposta.atletas.sort((a, b) => a.ordem - b.ordem).map(({ ordem, atualizado_em, ...atleta }) => atleta);
   salvarCadastro();
   renderCadastro();
@@ -839,6 +866,7 @@ async function atualizarDados() {
 
 // ---- Inicialização ---------------------------------------------------
 (async function init() {
+  carregarCredenciaisDaSessao();
   carregarCadastro();
   await atualizarDados();
 
