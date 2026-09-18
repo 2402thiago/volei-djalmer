@@ -826,15 +826,49 @@ function montarTimesLocais() {
   if (problemas.length) throw new Error(`Não foi possível sortear os times.\n${problemas.join("\n")}`);
 
   const forcaNivel = { C1: 7, M1: 6, M2: 5, F1: 4, F2: 3, LM1: 2, LF1: 1 };
-  ["C1", "M1", "F1"].forEach((pote) => {
-    const falta = 4 - ativos.filter((p) => p.nivel === pote).length;
-    if (falta <= 0) return;
-    const candidatos = ativos.filter((p) => p.nivel === "M2" && p.potes_adicionais.includes(pote)).sort((a, b) => a.ranking - b.ranking);
-    if (candidatos.length < falta) {
-      throw new Error(`Não foi possível completar o pote ${pote}.\nFaltam ${falta} atleta(s) M2 com permissão para atuar em ${pote}.`);
+  const potesObrigatorios = ["C1", "M1", "F1"];
+  const opcoesDePote = new Map(ativos.map((p) => [p.id, [p.nivel, ...p.potes_adicionais.filter((pote) => pote !== p.nivel)]]));
+  const contagens = Object.fromEntries(NIVEIS.map((pote) => [pote, 0]));
+  const ordenadosParaPote = [...ativos].sort((a, b) => opcoesDePote.get(a.id).length - opcoesDePote.get(b.id).length || a.ranking - b.ranking);
+  const combinacoesM2F2 = [4, 8, 12];
+  let tentativasDePote = 0;
+
+  const atribuicaoValida = (indice) => {
+    if (++tentativasDePote > 100000) return false;
+    const restantes = ordenadosParaPote.slice(indice);
+    if (potesObrigatorios.some((pote) => contagens[pote] + restantes.filter((p) => opcoesDePote.get(p.id).includes(pote)).length < 4)) return false;
+    const atuaisM2F2 = contagens.M2 + contagens.F2;
+    const restantesM2F2 = restantes.filter((p) => opcoesDePote.get(p.id).some((pote) => pote === "M2" || pote === "F2")).length;
+    if (!combinacoesM2F2.some((total) => total >= atuaisM2F2 && total <= atuaisM2F2 + restantesM2F2)) return false;
+    if (indice === ordenadosParaPote.length) {
+      return potesObrigatorios.every((pote) => contagens[pote] >= 4) && combinacoesM2F2.includes(contagens.M2 + contagens.F2);
     }
-    candidatos.slice(0, falta).forEach((p) => { p.nivel = pote; p.promovido_de = "M2"; });
-  });
+    const atleta = ordenadosParaPote[indice];
+    const opcoes = [...opcoesDePote.get(atleta.id)].sort((a, b) => {
+      const principalA = a === atleta.pote_principal ? 0 : 1;
+      const principalB = b === atleta.pote_principal ? 0 : 1;
+      return principalA - principalB || (potesObrigatorios.includes(a) ? -1 : 1) - (potesObrigatorios.includes(b) ? -1 : 1);
+    });
+    return opcoes.some((pote) => {
+      atleta.nivel = pote;
+      contagens[pote] += 1;
+      if (atribuicaoValida(indice + 1)) return true;
+      contagens[pote] -= 1;
+      atleta.nivel = atleta.pote_principal;
+      return false;
+    });
+  };
+
+  ativos.forEach((p) => { p.pote_principal = p.nivel; });
+  if (!atribuicaoValida(0)) {
+    const diagnostico = potesObrigatorios.map((pote) => {
+      const principais = ativos.filter((p) => p.pote_principal === pote).length;
+      const habilitados = ativos.filter((p) => opcoesDePote.get(p.id).includes(pote)).length;
+      return `${pote}: ${principais} principal(is), ${habilitados} habilitado(s)`;
+    });
+    throw new Error(`Não foi possível encontrar uma combinação válida dos potes autorizados.\n${diagnostico.join("\n")}`);
+  }
+  ativos.forEach((p) => { if (p.nivel !== p.pote_principal) p.promovido_de = p.pote_principal; });
   const forcaGlobal = (p) => ativos.length - p.ranking + 1;
   const potes = ["C1", "M1", "F1"].map((nivel) =>
     ativos.filter((p) => p.nivel === nivel).sort((a, b) => a.ranking - b.ranking)
