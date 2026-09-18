@@ -37,6 +37,7 @@
     <button data-tela="dashboard" class="aba ativa">Times</button>
     <button data-tela="participantes" class="aba">Participantes</button>
     <button data-tela="presenca" class="aba">Presença</button>
+    <button data-tela="cadastro" class="aba">Cadastro</button>
   </nav>
 
   <main>
@@ -109,6 +110,33 @@
         <p class="msg">Confirme os atletas. Cada time completo recebe a próxima posição de entrada.</p>
       </div>
       <div id="lista-presenca" class="lista-presenca"></div>
+    </section>
+
+    <section id="cadastro" class="tela">
+      <div class="card acao">
+        <label>Adicionar atleta</label>
+        <div class="linha cadastro-linha">
+          <input id="cadastro-nome" type="text" placeholder="Nome principal" maxlength="80" />
+          <select id="cadastro-sexo" title="Sexo"><option value="">Sexo</option><option value="F">F</option><option value="M">M</option></select>
+          <select id="cadastro-pote" title="Pote principal"><option value="">Pote</option><option value="C1">C1</option><option value="M1">M1</option><option value="M2">M2</option><option value="F1">F1</option><option value="F2">F2</option><option value="LM1">LM1</option><option value="LF1">LF1</option></select>
+          <button id="btn-cadastro-adicionar" class="primario">Adicionar atleta</button>
+        </div>
+        <p id="msg-cadastro" class="msg"></p>
+      </div>
+      <div class="card acao">
+        <label>Vincular nome a atleta</label>
+        <div class="linha cadastro-linha">
+          <input id="cadastro-alias" type="text" placeholder="Nome alternativo" maxlength="80" />
+          <select id="cadastro-alvo" title="Atleta cadastrado"></select>
+          <button id="btn-cadastro-vincular" class="secundario">Vincular nome</button>
+        </div>
+        <p id="msg-vinculo" class="msg"></p>
+      </div>
+      <div class="card">
+        <h2>Lista única de nivelamento</h2>
+        <p class="msg">Do mais forte para o mais fraco. Arraste para reorganizar.</p>
+        <div id="lista-cadastro" class="lista-cadastro"></div>
+      </div>
     </section>
 
   </main>

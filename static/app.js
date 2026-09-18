@@ -99,6 +99,138 @@ if (!Array.isArray(casaisAtivos) || casaisAtivos.length !== casaisConfigurados.l
 const normalizarNome = (nome) => String(nome || "")
   .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
 
+const NIVEIS = ["C1", "M1", "M2", "F1", "F2", "LM1", "LF1"];
+const STORAGE_CADASTRO = "volei.cadastro.atletas.v1";
+let cadastroAtletas = [];
+
+function salvarCadastro() { localStorage.setItem(STORAGE_CADASTRO, JSON.stringify(cadastroAtletas)); }
+
+function carregarCadastro() {
+  try { cadastroAtletas = JSON.parse(localStorage.getItem(STORAGE_CADASTRO) || "[]"); } catch { cadastroAtletas = []; }
+  if (!Array.isArray(cadastroAtletas)) cadastroAtletas = [];
+  cadastroAtletas = cadastroAtletas.filter((atleta) => atleta && atleta.id && atleta.nome).map((atleta) => ({
+    id: atleta.id,
+    nome: atleta.nome,
+    sexo: atleta.sexo || "",
+    pote: NIVEIS.includes(atleta.pote) ? atleta.pote : "",
+    potesAdicionais: Array.isArray(atleta.potesAdicionais) ? atleta.potesAdicionais.filter((pote) => NIVEIS.includes(pote)) : [],
+    aliases: Array.isArray(atleta.aliases) ? atleta.aliases : [],
+  }));
+  renderCadastro();
+}
+
+function encontrarCadastro(nome) {
+  const chave = normalizarNome(nome);
+  return cadastroAtletas.find((atleta) => normalizarNome(atleta.nome) === chave || atleta.aliases.some((alias) => normalizarNome(alias) === chave));
+}
+
+function migrarCadastroLegado() {
+  if (cadastroAtletas.length || !participantes.length) return;
+  const forca = { C1: 7, M1: 6, M2: 5, F1: 4, F2: 3, LM1: 2, LF1: 1 };
+  cadastroAtletas = [...participantes].sort((a, b) => forca[b.nivel] - forca[a.nivel] || (a.ranking || 0) - (b.ranking || 0)).map((p) => ({
+    id: p.id,
+    nome: p.nome,
+    sexo: p.sexo || "",
+    pote: NIVEIS.includes(p.nivel) ? p.nivel : "",
+    potesAdicionais: [],
+    aliases: [],
+  }));
+  salvarCadastro();
+  renderCadastro();
+}
+
+function renderCadastro() {
+  const lista = $("lista-cadastro");
+  const alvo = $("cadastro-alvo");
+  if (!lista || !alvo) return;
+  alvo.innerHTML = cadastroAtletas.length ? cadastroAtletas.map((atleta) => `<option value="${atleta.id}">${esc(atleta.nome)}</option>`).join("") : '<option value="">Cadastre um atleta primeiro</option>';
+  lista.innerHTML = "";
+  if (!cadastroAtletas.length) {
+    lista.innerHTML = '<div class="card">Nenhum atleta cadastrado.</div>';
+    return;
+  }
+  cadastroAtletas.forEach((atleta, indice) => {
+    const item = document.createElement("div");
+    item.className = "atleta-cadastro";
+    item.draggable = true;
+    item.dataset.cadastroId = atleta.id;
+    const opcoes = NIVEIS.map((pote) => `<option value="${pote}" ${atleta.pote === pote ? "selected" : ""}>${pote}</option>`).join("");
+    const adicionais = NIVEIS.filter((pote) => pote !== atleta.pote).map((pote) => `<label><input type="checkbox" data-pote-adicional="${pote}" ${atleta.potesAdicionais.includes(pote) ? "checked" : ""} />${pote}</label>`).join("");
+    item.innerHTML = `<div class="cabecalho-cadastro"><span>${indice + 1}. <input data-cadastro-nome value="${esc(atleta.nome)}" maxlength="80" /></span><span>Arraste</span></div><div class="linha"><select data-cadastro-sexo><option value="" ${!atleta.sexo ? "selected" : ""}>Sexo</option><option value="F" ${atleta.sexo === "F" ? "selected" : ""}>F</option><option value="M" ${atleta.sexo === "M" ? "selected" : ""}>M</option></select><select data-cadastro-pote><option value="">Pote principal</option>${opcoes}</select></div><div class="det-cadastro">Nomes vinculados: ${atleta.aliases.length ? atleta.aliases.map(esc).join(", ") : "nenhum"}</div><div class="potes-adicionais"><span class="det-cadastro">Também pode atuar em:</span>${adicionais}</div>`;
+    lista.appendChild(item);
+  });
+  lista.querySelectorAll("[data-cadastro-nome]").forEach((input) => input.addEventListener("change", () => atualizarCadastro(input.closest("[data-cadastro-id]").dataset.cadastroId, { nome: input.value.trim() })));
+  lista.querySelectorAll("[data-cadastro-sexo]").forEach((select) => select.addEventListener("change", () => atualizarCadastro(select.closest("[data-cadastro-id]").dataset.cadastroId, { sexo: select.value })));
+  lista.querySelectorAll("[data-cadastro-pote]").forEach((select) => select.addEventListener("change", () => atualizarCadastro(select.closest("[data-cadastro-id]").dataset.cadastroId, { pote: select.value })));
+  lista.querySelectorAll("[data-pote-adicional]").forEach((input) => input.addEventListener("change", () => {
+    const atleta = cadastroAtletas.find((item) => item.id === input.closest("[data-cadastro-id]").dataset.cadastroId);
+    atleta.potesAdicionais = NIVEIS.filter((pote) => pote !== atleta.pote && input.closest("[data-cadastro-id]").querySelector(`[data-pote-adicional="${pote}"]`)?.checked);
+    salvarCadastro(); renderCadastro();
+  }));
+  configurarArrasteCadastro(lista);
+}
+
+function atualizarCadastro(id, alteracoes) {
+  const atleta = cadastroAtletas.find((item) => item.id === id);
+  if (!atleta) return;
+  Object.assign(atleta, alteracoes);
+  atleta.potesAdicionais = atleta.potesAdicionais.filter((pote) => pote !== atleta.pote);
+  salvarCadastro(); renderCadastro();
+}
+
+function configurarArrasteCadastro(lista) {
+  let origem = null;
+  lista.querySelectorAll(".atleta-cadastro").forEach((item) => {
+    item.addEventListener("dragstart", () => { origem = item; item.classList.add("arrastando"); });
+    item.addEventListener("dragend", () => { item.classList.remove("arrastando"); lista.querySelectorAll(".alvo-arraste").forEach((alvo) => alvo.classList.remove("alvo-arraste")); });
+    item.addEventListener("dragover", (event) => { event.preventDefault(); if (origem && origem !== item) item.classList.add("alvo-arraste"); });
+    item.addEventListener("dragleave", () => item.classList.remove("alvo-arraste"));
+    item.addEventListener("drop", (event) => {
+      event.preventDefault(); if (!origem || origem === item) return;
+      const de = cadastroAtletas.findIndex((atleta) => atleta.id === origem.dataset.cadastroId);
+      const para = cadastroAtletas.findIndex((atleta) => atleta.id === item.dataset.cadastroId);
+      const [atleta] = cadastroAtletas.splice(de, 1);
+      cadastroAtletas.splice(para, 0, atleta);
+      salvarCadastro(); renderCadastro();
+    });
+  });
+}
+
+$("btn-cadastro-adicionar").addEventListener("click", () => {
+  const nome = $("cadastro-nome").value.trim();
+  const mensagem = $("msg-cadastro");
+  if (!nome) return;
+  if (encontrarCadastro(nome)) {
+    mensagem.textContent = "Este nome já está cadastrado ou vinculado.";
+    mensagem.className = "msg erro";
+    return;
+  }
+  cadastroAtletas.push({ id: novoId(), nome, sexo: $("cadastro-sexo").value, pote: $("cadastro-pote").value, potesAdicionais: [], aliases: [] });
+  salvarCadastro(); renderCadastro();
+  $("cadastro-nome").value = "";
+  $("cadastro-sexo").value = "";
+  $("cadastro-pote").value = "";
+  mensagem.textContent = "Atleta adicionado ao final da lista.";
+  mensagem.className = "msg";
+});
+
+$("btn-cadastro-vincular").addEventListener("click", () => {
+  const alias = $("cadastro-alias").value.trim();
+  const mensagem = $("msg-vinculo");
+  const atleta = cadastroAtletas.find((item) => item.id === $("cadastro-alvo").value);
+  if (!alias || !atleta) return;
+  if (encontrarCadastro(alias)) {
+    mensagem.textContent = "Este nome já está cadastrado ou vinculado.";
+    mensagem.className = "msg erro";
+    return;
+  }
+  atleta.aliases.push(alias);
+  salvarCadastro(); renderCadastro();
+  $("cadastro-alias").value = "";
+  mensagem.textContent = `Nome vinculado a ${atleta.nome}.`;
+  mensagem.className = "msg";
+});
+
 function atualizarBotaoCasais() {
   const botao = $("btn-casais");
   botao.textContent = `Casais: ${sorteioComCasais ? "ativado" : "desativado"}`;
@@ -180,6 +312,7 @@ async function carregarParticipantes() {
     }
   }
   participanteId = new Map(participantes.map((p) => [p.nome, p.id]));
+  migrarCadastroLegado();
   renderParticipantes();
 }
 
@@ -202,93 +335,14 @@ function renderParticipantes() {
   exibidos.forEach((p) => {
     const item = document.createElement("div");
     item.className = "item participante-item";
-    item.draggable = Boolean(filtrosParticipantes.nivel && p.nivel === filtrosParticipantes.nivel);
-    item.dataset.participanteId = p.id;
+    item.draggable = false;
     item.innerHTML = `
       <div>
         <div class="nome">${esc(p.nome)}</div>
-        <div class="det">${p.sexo || "Sexo não definido"} · ${p.nivel || "Nível não definido"} · ${p.ranking ? `${p.ranking}º` : "Ranking não definido"}</div>
-      </div>
-      <div class="acoes">
-        <input class="edicao-nome" data-nome="${p.id}" value="${esc(p.nome)}" maxlength="80" title="Nome" />
-        <select data-sexo="${p.id}" title="Sexo">
-          <option value="" ${!p.sexo ? "selected" : ""}>Sexo</option>
-          <option value="F" ${p.sexo === "F" ? "selected" : ""}>F</option>
-          <option value="M" ${p.sexo === "M" ? "selected" : ""}>M</option>
-        </select>
-        <select data-nivel="${p.id}" title="Nível">
-          <option value="" ${!p.nivel ? "selected" : ""}>Nível</option>
-          <option value="C1" ${p.nivel === "C1" ? "selected" : ""}>C1</option>
-          <option value="M1" ${p.nivel === "M1" ? "selected" : ""}>M1</option>
-          <option value="M2" ${p.nivel === "M2" ? "selected" : ""}>M2</option>
-          <option value="F1" ${p.nivel === "F1" ? "selected" : ""}>F1</option>
-          <option value="F2" ${p.nivel === "F2" ? "selected" : ""}>F2</option>
-          <option value="LM1" ${p.nivel === "LM1" ? "selected" : ""}>LM1</option>
-          <option value="LF1" ${p.nivel === "LF1" ? "selected" : ""}>LF1</option>
-        </select>
-        <input class="edicao-ranking" data-ranking="${p.id}" type="number" min="1" placeholder="#" value="${p.ranking || ""}" title="Ranking no nível" />
+      <div class="det">${p.sexo || "Sexo não definido"} · ${p.nivel || "Pote não definido"} · posição geral ${p.ranking || "não definida"}</div>
       </div>`;
     lista.appendChild(item);
   });
-
-  lista.querySelectorAll("[data-nome]").forEach((input) => {
-    input.addEventListener("change", () => editarParticipante(input.dataset.nome, { nome: input.value }));
-  });
-  lista.querySelectorAll("[data-sexo]").forEach((select) => {
-    select.addEventListener("change", () => editarParticipante(select.dataset.sexo, { sexo: select.value }));
-  });
-  lista.querySelectorAll("[data-nivel]").forEach((select) => {
-    select.addEventListener("change", () => editarParticipante(select.dataset.nivel, { nivel: select.value }));
-  });
-  lista.querySelectorAll("[data-ranking]").forEach((input) => {
-    input.addEventListener("change", () => editarParticipante(input.dataset.ranking, { ranking: input.value }));
-  });
-
-  if (filtrosParticipantes.nivel) {
-    let marcadorArraste = null;
-    lista.querySelectorAll(".participante-item[draggable='true']").forEach((item) => {
-      item.addEventListener("dragstart", (event) => {
-        item.classList.add("arrastando");
-        event.dataTransfer.effectAllowed = "move";
-        event.dataTransfer.setData("text/plain", item.dataset.participanteId);
-      });
-      item.addEventListener("dragend", () => {
-        item.classList.remove("arrastando");
-        marcadorArraste?.remove();
-        marcadorArraste = null;
-        lista.querySelectorAll(".alvo-arraste").forEach((alvo) => alvo.classList.remove("alvo-arraste"));
-      });
-      item.addEventListener("dragover", (event) => {
-        event.preventDefault();
-        const origem = lista.querySelector(".arrastando");
-        if (!origem || origem === item) return;
-        const rect = item.getBoundingClientRect();
-        const depois = event.clientY > rect.top + rect.height / 2;
-        if (!marcadorArraste) {
-          marcadorArraste = document.createElement("div");
-          marcadorArraste.className = "marcador-arraste";
-          marcadorArraste.textContent = depois ? "Soltar abaixo" : "Soltar acima";
-        }
-        marcadorArraste.textContent = depois ? "Soltar abaixo" : "Soltar acima";
-        item.classList.add("alvo-arraste");
-        if (depois) item.after(marcadorArraste);
-        else item.before(marcadorArraste);
-      });
-      item.addEventListener("drop", (event) => {
-        event.preventDefault();
-        const origem = lista.querySelector(".arrastando");
-        if (!origem || origem === item) return;
-        const rect = item.getBoundingClientRect();
-        const depois = event.clientY > rect.top + rect.height / 2;
-        if (depois) item.after(origem);
-        else item.before(origem);
-        marcadorArraste?.remove();
-        marcadorArraste = null;
-        item.classList.remove("alvo-arraste");
-        salvarRankingDoNivel();
-      });
-    });
-  }
 }
 
 function renderResumoParticipantes() {
@@ -498,6 +552,7 @@ $("btn-limpar-dados").addEventListener("click", () => {
   localStorage.removeItem(STORAGE_CASAIS_ATIVOS);
   localStorage.removeItem(STORAGE_CASAIS_CONFIG);
   localStorage.removeItem(STORAGE_PRESENCA);
+  localStorage.removeItem(STORAGE_CADASTRO);
   participantes = [];
   participanteId = new Map();
   times = [];
@@ -505,10 +560,12 @@ $("btn-limpar-dados").addEventListener("click", () => {
   sorteioComCasais = false;
   casaisConfigurados = CASAIS_PADRAO.map((casal) => [...casal]);
   casaisAtivos = casaisConfigurados.map(() => true);
+  cadastroAtletas = [];
   atualizarBotaoCasais();
   filtrosParticipantes.sexo = "";
   filtrosParticipantes.nivel = "";
   renderParticipantes();
+  renderCadastro();
   renderTimes();
   renderPresenca();
   document.querySelectorAll(".atalho-nivel").forEach((item) => item.classList.toggle("ativo", item.dataset.nivel === ""));
@@ -571,16 +628,33 @@ $('btn-compartilhar-times').addEventListener("click", async () => {
 
 function montarTimesLocais() {
   const ativos = participantes.filter((p) => p.status === "ativo");
-  const niveis = ["C1", "M1", "M2", "F1", "F2", "LM1", "LF1"];
   const problemas = [];
   if (ativos.length !== 24) problemas.push(`- Atletas ativos: ${ativos.length}; são necessários 24.`);
-  const niveisInvalidos = ativos.filter((p) => p.nivel && !niveis.includes(p.nivel));
-  niveisInvalidos.forEach((p) => problemas.push(`- ${p.nome}: nível "${p.nivel}" inválido.`));
-  ativos.filter((p) => !p.nivel).forEach((p) => problemas.push(`- ${p.nome}: nível não definido.`));
-  ativos.filter((p) => !p.ranking).forEach((p) => problemas.push(`- ${p.nome}: ranking não definido.`));
+  const cadastroPorId = new Map(cadastroAtletas.map((atleta, indice) => [atleta.id, { atleta, indice }]));
+  ativos.forEach((p) => {
+    const registro = cadastroPorId.get(p.id);
+    if (!registro) { problemas.push(`- ${p.nome}: atleta não cadastrado.`); return; }
+    p.nome = registro.atleta.nome;
+    p.sexo = registro.atleta.sexo;
+    p.nivel = registro.atleta.pote || null;
+    p.potes_adicionais = registro.atleta.potesAdicionais;
+    p.ranking = registro.indice + 1;
+  });
+  ativos.filter((p) => !p.nivel).forEach((p) => problemas.push(`- ${p.nome}: pote principal não definido no Cadastro.`));
+  ativos.filter((p) => !p.sexo).forEach((p) => problemas.push(`- ${p.nome}: sexo não definido no Cadastro.`));
   if (problemas.length) throw new Error(`Não foi possível sortear os times.\n${problemas.join("\n")}`);
 
   const forcaNivel = { C1: 7, M1: 6, M2: 5, F1: 4, F2: 3, LM1: 2, LF1: 1 };
+  ["C1", "M1", "F1"].forEach((pote) => {
+    const falta = 4 - ativos.filter((p) => p.nivel === pote).length;
+    if (falta <= 0) return;
+    const candidatos = ativos.filter((p) => p.nivel === "M2" && p.potes_adicionais.includes(pote)).sort((a, b) => a.ranking - b.ranking);
+    if (candidatos.length < falta) {
+      throw new Error(`Não foi possível completar o pote ${pote}.\nFaltam ${falta} atleta(s) M2 com permissão para atuar em ${pote}.`);
+    }
+    candidatos.slice(0, falta).forEach((p) => { p.nivel = pote; p.promovido_de = "M2"; });
+  });
+  const forcaGlobal = (p) => ativos.length - p.ranking + 1;
   const potes = ["C1", "M1", "F1"].map((nivel) =>
     ativos.filter((p) => p.nivel === nivel).sort((a, b) => a.ranking - b.ranking)
   );
@@ -644,7 +718,7 @@ function montarTimesLocais() {
       }
     });
     const distribuicao = novos.map(() => ({ C1: 0, M1: 0, F1: 0, M2F2: 0, levantadores: 0 }));
-    unidades.sort((a, b) => b.length - a.length || b.reduce((s, p) => s + forcaNivel[p.nivel], 0) - a.reduce((s, p) => s + forcaNivel[p.nivel], 0));
+    unidades.sort((a, b) => b.length - a.length || b.reduce((s, p) => s + forcaGlobal(p), 0) - a.reduce((s, p) => s + forcaGlobal(p), 0));
     let tentativas = 0;
     const distribuir = (indice) => {
       if (indice === unidades.length) return true;
@@ -658,8 +732,8 @@ function montarTimesLocais() {
       const candidatos = [0, 1, 2, 3].filter((time) => novos[time].jogadores.length + unidade.length <= 6 &&
         Object.entries(porGrupo).every(([grupo, quantidade]) => distribuicao[time][grupo] + quantidade <= metas[grupo][time])
       ).sort((a, b) => {
-        const forcaA = novos[a].jogadores.reduce((s, p) => s + forcaNivel[p.nivel], 0);
-        const forcaB = novos[b].jogadores.reduce((s, p) => s + forcaNivel[p.nivel], 0);
+        const forcaA = novos[a].jogadores.reduce((s, p) => s + forcaGlobal(p), 0);
+        const forcaB = novos[b].jogadores.reduce((s, p) => s + forcaGlobal(p), 0);
         return forcaA - forcaB || Math.random() - 0.5;
       });
       return candidatos.some((time) => {
@@ -681,7 +755,7 @@ function montarTimesLocais() {
   }
   novos.forEach((time) => {
     time.jogadores.sort((a, b) => forcaNivel[b.nivel] - forcaNivel[a.nivel] || a.ranking - b.ranking);
-    time.nivel_medio = (time.jogadores.reduce((sum, p) => sum + forcaNivel[p.nivel], 0) / 6).toFixed(2);
+    time.nivel_medio = (time.jogadores.reduce((sum, p) => sum + forcaGlobal(p), 0) / 6).toFixed(2);
   });
   return novos;
 }
@@ -707,6 +781,7 @@ async function atualizarDados() {
 
 // ---- Inicialização ---------------------------------------------------
 (async function init() {
+  carregarCadastro();
   await atualizarDados();
 
   // Importar da lista WhatsApp
@@ -732,7 +807,22 @@ async function atualizarDados() {
     try {
       $("btn-confirmar-importar").disabled = true;
       $("msg-importar").textContent = "Importando e limpando lista anterior...";
-      participantes = nomes.map((nome) => ({ id: novoId(), nome, sexo: "", nivel: null, ranking: null, status: "ativo", criado_em: new Date().toISOString(), atualizado_em: new Date().toISOString() }));
+      const semCadastro = nomes.filter((nome) => !encontrarCadastro(nome));
+      if (semCadastro.length) throw new Error(`Nomes sem cadastro: ${semCadastro.join(", ")}. Cadastre ou vincule esses nomes antes de importar.`);
+      const atletas = nomes.map((nome) => encontrarCadastro(nome));
+      const repetidos = atletas.filter((atleta, indice) => atletas.findIndex((item) => item.id === atleta.id) !== indice);
+      if (repetidos.length) throw new Error(`A lista contém nomes vinculados ao mesmo atleta: ${[...new Set(repetidos.map((atleta) => atleta.nome))].join(", ")}.`);
+      participantes = atletas.map((atleta) => ({
+        id: atleta.id,
+        nome: atleta.nome,
+        sexo: atleta.sexo,
+        nivel: atleta.pote || null,
+        ranking: cadastroAtletas.findIndex((item) => item.id === atleta.id) + 1,
+        potes_adicionais: atleta.potesAdicionais,
+        status: "ativo",
+        criado_em: new Date().toISOString(),
+        atualizado_em: new Date().toISOString(),
+      }));
       salvarParticipantesLocais();
       $("msg-importar").textContent = `✅ ${nomes.length} importados localmente. Lista anterior removida.`;
       $("msg-importar").className = "msg";

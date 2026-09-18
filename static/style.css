@@ -143,6 +143,17 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .atletas-presenca { display: grid; gap: 7px; }
 .atleta-presenca { width: 100%; text-align: left; }
 .atleta-presenca.presente { background: var(--acento); border-color: var(--acento); color: #fff; font-weight: 600; }
+.cadastro-linha { flex-wrap: wrap; }
+.cadastro-linha input { flex: 1; min-width: 150px; }
+.cadastro-linha select { min-width: 90px; }
+.lista-cadastro { display: grid; gap: 8px; margin-top: 12px; }
+.atleta-cadastro { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--borda); border-radius: 10px; background: var(--card); cursor: grab; }
+.atleta-cadastro.arrastando { opacity: 0.45; }
+.atleta-cadastro.alvo-arraste { border-color: var(--acento); box-shadow: 0 0 0 2px var(--acento-suave); }
+.cabecalho-cadastro { display: flex; justify-content: space-between; gap: 8px; font-weight: 600; }
+.det-cadastro { font-size: 12px; color: var(--texto-suave); }
+.potes-adicionais { display: flex; flex-wrap: wrap; gap: 7px; }
+.potes-adicionais label { display: flex; gap: 4px; align-items: center; font-size: 12px; }
 
 .lista .item {
   background: var(--card);
