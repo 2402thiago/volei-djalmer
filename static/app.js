@@ -77,6 +77,7 @@ function atualizarVisibilidadeCasais(tela) {
   const botao = $("btn-abrir-casais");
   botao.hidden = tela !== "participantes";
   if (tela !== "participantes" && $("popup-casais").open) $("popup-casais").close();
+  $("btn-configurar-pontos").hidden = tela !== "pontos";
 }
 
 atualizarVisibilidadeCasais("dashboard");
@@ -796,10 +797,13 @@ const STORAGE_TIMES = "volei.times.v1";
 const STORAGE_PRESENCA = "volei.presenca.v1";
 const STORAGE_PONTOS = "volei.pontos.v1";
 const STORAGE_PARTIDA_PONTOS = "volei.partida.pontos.v1";
+const STORAGE_TOTAL_PONTOS = "volei.total.pontos.v1";
 let presenca = { assinatura: "", atletas: {}, ordem: [] };
 let pontos = [];
 let partidaPontos = { timeA: "", timeB: "" };
 let registroPonto = null;
+let totalPontosPartida = Number(localStorage.getItem(STORAGE_TOTAL_PONTOS) || 25);
+if (!Number.isInteger(totalPontosPartida) || totalPontosPartida < 1) totalPontosPartida = 25;
 try { partidaPontos = JSON.parse(localStorage.getItem(STORAGE_PARTIDA_PONTOS) || "null") || partidaPontos; } catch { /* Usa a partida padrão. */ }
 function salvarTimesLocais() { localStorage.setItem(STORAGE_TIMES, JSON.stringify(times)); }
 
@@ -870,17 +874,22 @@ function pontosDaPartida() {
 }
 
 function iniciarRegistroPonto(timeId) {
-  registroPonto = { timeId, atletaId: "" };
+  registroPonto = { timeId, modo: "escolha", atletaId: "" };
   renderPontos();
 }
+
+function outroTime(timeId) { return times.find((time) => time.id !== timeId && [partidaPontos.timeA, partidaPontos.timeB].includes(time.id)); }
 
 function registrarPonto(fundamento) {
   const time = timePorId(registroPonto?.timeId);
   const atleta = time?.jogadores.find((jogador) => jogador.id === registroPonto.atletaId);
   if (!time || !atleta) return;
+  const timePonto = registroPonto.modo === "contra" ? outroTime(time.id) : time;
   pontos.push({
     id: novoId(), partida: chavePartida(), time_id: time.id, time_nome: time.nome,
-    atleta_id: atleta.id, atleta_nome: atleta.nome, fundamento, registrado_em: new Date().toISOString(),
+    time_ponto_id: timePonto.id, time_ponto_nome: timePonto.nome,
+    atleta_id: atleta.id, atleta_nome: atleta.nome, fundamento: fundamento || null,
+    modo: registroPonto.modo, registrado_em: new Date().toISOString(),
   });
   salvarPontos();
   registroPonto = null;
@@ -890,10 +899,13 @@ function registrarPonto(fundamento) {
 function resumoAtletasPontos(eventos) {
   const atletas = new Map();
   eventos.forEach((ponto) => {
-    if (!atletas.has(ponto.atleta_id)) atletas.set(ponto.atleta_id, { nome: ponto.atleta_nome, time: ponto.time_nome, total: 0, Saque: 0, Bloqueio: 0, Ataque: 0 });
+    if (!atletas.has(ponto.atleta_id)) atletas.set(ponto.atleta_id, { nome: ponto.atleta_nome, time: ponto.time_nome, total: 0, erros: 0, Saque: 0, Bloqueio: 0, Ataque: 0 });
     const resumo = atletas.get(ponto.atleta_id);
-    resumo.total += 1;
-    resumo[ponto.fundamento] += 1;
+    if (ponto.modo === "contra") resumo.erros += 1;
+    else {
+      resumo.total += 1;
+      resumo[ponto.fundamento] += 1;
+    }
   });
   return [...atletas.values()].sort((a, b) => b.total - a.total || a.nome.localeCompare(b.nome));
 }
@@ -903,7 +915,7 @@ function mensagemResumoPontos() {
   const timeB = timePorId(partidaPontos.timeB);
   const eventos = pontosDaPartida();
   const total = (time) => eventos.filter((ponto) => ponto.time_id === time.id).length;
-  const atletas = resumoAtletasPontos(eventos).map((atleta) => `${atleta.nome}: ${atleta.total} (${atleta.Saque} saque${atleta.Saque === 1 ? "" : "s"}, ${atleta.Bloqueio} bloqueio${atleta.Bloqueio === 1 ? "" : "s"}, ${atleta.Ataque} ataque${atleta.Ataque === 1 ? "" : "s"})`);
+  const atletas = resumoAtletasPontos(eventos).map((atleta) => `${atleta.nome}: ${atleta.total} ponto${atleta.total === 1 ? "" : "s"} (${atleta.Saque} saque${atleta.Saque === 1 ? "" : "s"}, ${atleta.Bloqueio} bloqueio${atleta.Bloqueio === 1 ? "" : "s"}, ${atleta.Ataque} ataque${atleta.Ataque === 1 ? "" : "s"})${atleta.erros ? `, ${atleta.erros} erro${atleta.erros === 1 ? "" : "s"}` : ""}`);
   return ["*Resumo da partida - Vôlei Djalmer*", "", `${timeA.nome}: ${total(timeA)} pontos`, `${timeB.nome}: ${total(timeB)} pontos`, "", "*Pontuação por atleta*", ...atletas].join("\n");
 }
 
@@ -914,10 +926,11 @@ function renderPontos() {
   const botaoB = $("btn-ponto-time-b");
   const botaoReiniciar = $("btn-reiniciar-partida");
   const botaoNova = $("btn-nova-partida");
+  const botaoDesfazer = $("btn-desfazer-ponto");
   const mensagem = $("msg-pontos");
   const registro = $("registro-ponto");
   const historico = $("historico-pontos");
-  if (!seletorA || !seletorB || !botaoA || !botaoB || !botaoReiniciar || !botaoNova || !mensagem || !registro || !historico) return;
+  if (!seletorA || !seletorB || !botaoA || !botaoB || !botaoReiniciar || !botaoNova || !botaoDesfazer || !mensagem || !registro || !historico) return;
 
   garantirTimesDaPartida();
   if (times.length < 2) {
@@ -927,6 +940,7 @@ function renderPontos() {
     botaoB.disabled = true;
     botaoReiniciar.disabled = true;
     botaoNova.disabled = true;
+    botaoDesfazer.disabled = true;
     mensagem.textContent = "Sorteie os times antes de registrar pontos.";
     registro.hidden = true;
     historico.innerHTML = "";
@@ -944,6 +958,7 @@ function renderPontos() {
   botaoB.disabled = false;
   botaoReiniciar.disabled = false;
   botaoNova.disabled = false;
+  botaoDesfazer.disabled = !pontosDaPartida().length;
   botaoA.textContent = "Ponto";
   botaoB.textContent = "Ponto";
   mensagem.textContent = "Clique no time que pontuou, selecione o atleta e depois o fundamento.";
@@ -954,9 +969,13 @@ function renderPontos() {
     else {
       registro.hidden = false;
       const atleta = time.jogadores.find((jogador) => jogador.id === registroPonto.atletaId);
-      registro.innerHTML = `<h2>Quem fez o ponto de ${esc(time.nome)}?</h2><div class="atletas-presenca atletas-ponto"></div>${atleta ? `<h3>Fundamento de ${esc(atleta.nome)}</h3><div class="fundamentos-ponto"><button class="atleta-presenca" data-fundamento="Saque">Saque</button><button class="atleta-presenca" data-fundamento="Bloqueio">Bloqueio</button><button class="atleta-presenca" data-fundamento="Ataque">Ataque</button></div>` : ""}`;
+      const timeAtletas = registroPonto.modo === "contra" ? outroTime(time.id) : time;
+      registro.innerHTML = registroPonto.modo === "escolha"
+        ? `<h2>Tipo de ponto</h2><div class="fundamentos-ponto"><button class="atleta-presenca" data-modo="direto">Ponto direto</button><button class="atleta-presenca" data-modo="contra">Ponto contra</button></div>`
+        : `<h2>${registroPonto.modo === "contra" ? "Quem cometeu o erro?" : `Quem fez o ponto de ${esc(time.nome)}?`}</h2><div class="atletas-presenca atletas-ponto"></div>${atleta && registroPonto.modo === "direto" ? `<h3>Fundamento de ${esc(atleta.nome)}</h3><div class="fundamentos-ponto"><button class="atleta-presenca" data-fundamento="Saque">Saque</button><button class="atleta-presenca" data-fundamento="Bloqueio">Bloqueio</button><button class="atleta-presenca" data-fundamento="Ataque">Ataque</button></div>` : ""}`;
+      registro.querySelectorAll("[data-modo]").forEach((botao) => botao.addEventListener("click", () => { registroPonto.modo = botao.dataset.modo; renderPontos(); }));
       const atletas = registro.querySelector(".atletas-ponto");
-      time.jogadores.forEach((jogador) => {
+      (timeAtletas || time).jogadores.forEach((jogador) => {
         const botao = document.createElement("button");
         const selecionado = jogador.id === registroPonto.atletaId;
         botao.className = `atleta-presenca${selecionado ? " presente" : ""}`;
@@ -966,7 +985,8 @@ function renderPontos() {
       });
       registro.querySelectorAll("[data-ponto-atleta]").forEach((botao) => botao.addEventListener("click", () => {
         registroPonto.atletaId = botao.dataset.pontoAtleta;
-        renderPontos();
+        if (registroPonto.modo === "contra") registrarPonto();
+        else renderPontos();
       }));
       registro.querySelectorAll("[data-fundamento]").forEach((botao) => botao.addEventListener("click", () => registrarPonto(botao.dataset.fundamento)));
     }
@@ -975,10 +995,10 @@ function renderPontos() {
   }
 
   const eventos = pontosDaPartida();
-  const total = (time) => eventos.filter((ponto) => ponto.time_id === time.id).length;
-  const linhas = resumoAtletasPontos(eventos).map((atleta) => `<tr><th scope="row">${esc(atleta.nome)}<small>${esc(atleta.time)}</small></th><td>${atleta.total}</td><td>${atleta.Saque}</td><td>${atleta.Bloqueio}</td><td>${atleta.Ataque}</td></tr>`).join("");
-  const lances = [...eventos].reverse().map((ponto) => `<li><strong>${esc(ponto.time_nome)}</strong>: ${esc(ponto.atleta_nome)} - ${esc(ponto.fundamento)}</li>`).join("");
-  historico.innerHTML = `<div class="card historico-pontos"><div class="cabecalho-cadastro"><h2>Histórico da partida</h2><button id="btn-compartilhar-pontos" class="secundario" ${eventos.length ? "" : "disabled"}>Compartilhar resumo</button></div><div class="placar-pontos"><strong>${esc(timeA.nome)} <span>${total(timeA)}</span></strong><strong>${esc(timeB.nome)} <span>${total(timeB)}</span></strong></div>${eventos.length ? `<div class="tabela-resumo"><table><thead><tr><th>Atleta</th><th>Total</th><th>Saque</th><th>Bloqueio</th><th>Ataque</th></tr></thead><tbody>${linhas}</tbody></table></div><ul class="lances-pontos">${lances}</ul>` : '<p class="msg">Nenhum ponto registrado nesta partida.</p>'}</div>`;
+  const total = (time) => eventos.filter((ponto) => ponto.time_ponto_id === time.id).length;
+  const linhas = resumoAtletasPontos(eventos).map((atleta) => `<tr><th scope="row">${esc(atleta.nome)}<small>${esc(atleta.time)}</small></th><td>${atleta.total}</td><td>${atleta.Saque}</td><td>${atleta.Bloqueio}</td><td>${atleta.Ataque}</td><td>${atleta.erros}</td></tr>`).join("");
+  const lances = [...eventos].reverse().map((ponto) => `<li><strong>${esc(ponto.time_ponto_nome)}</strong>: ${ponto.modo === "contra" ? `erro de ${esc(ponto.atleta_nome)}` : `${esc(ponto.atleta_nome)} - ${esc(ponto.fundamento)}`}</li>`).join("");
+  historico.innerHTML = `<div class="card historico-pontos"><div class="cabecalho-cadastro"><h2>Histórico da partida</h2><button id="btn-compartilhar-pontos" class="secundario" ${eventos.length ? "" : "disabled"}>Compartilhar resumo</button></div><p class="msg">Meta: ${totalPontosPartida} pontos</p><div class="placar-pontos"><strong>${esc(timeA.nome)} <span>${total(timeA)}</span></strong><strong>${esc(timeB.nome)} <span>${total(timeB)}</span></strong></div>${eventos.length ? `<div class="tabela-resumo"><table><thead><tr><th>Atleta</th><th>Total</th><th>Saque</th><th>Bloqueio</th><th>Ataque</th><th>Erros</th></tr></thead><tbody>${linhas}</tbody></table></div><ul class="lances-pontos">${lances}</ul>` : '<p class="msg">Nenhum ponto registrado nesta partida.</p>'}</div>`;
   $("btn-compartilhar-pontos")?.addEventListener("click", async () => {
     const texto = mensagemResumoPontos();
     try {
@@ -1021,6 +1041,29 @@ $("btn-nova-partida").addEventListener("click", () => {
   partidaPontos = { timeA: primeiroTime, timeB: times.find((time) => time.id !== primeiroTime)?.id || "" };
   salvarPartidaPontos();
   registroPonto = null;
+  renderPontos();
+});
+
+$("btn-desfazer-ponto").addEventListener("click", () => {
+  const eventos = pontosDaPartida();
+  if (!eventos.length) return;
+  const ultimo = eventos[eventos.length - 1];
+  pontos = pontos.filter((ponto) => ponto.id !== ultimo.id);
+  salvarPontos();
+  renderPontos();
+});
+
+$("btn-configurar-pontos").addEventListener("click", () => {
+  $("total-pontos-partida").value = totalPontosPartida;
+  $("popup-config-pontos").showModal();
+});
+$("btn-fechar-config-pontos").addEventListener("click", () => $("popup-config-pontos").close());
+$("btn-salvar-config-pontos").addEventListener("click", () => {
+  const valor = Number($("total-pontos-partida").value);
+  if (!Number.isInteger(valor) || valor < 1) { $("msg-config-pontos").textContent = "Informe um total de pontos válido."; return; }
+  totalPontosPartida = valor;
+  localStorage.setItem(STORAGE_TOTAL_PONTOS, String(valor));
+  $("popup-config-pontos").close();
   renderPontos();
 });
 

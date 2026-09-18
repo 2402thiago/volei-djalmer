@@ -12,6 +12,7 @@
     <div class="acoes-topo">
       <span id="indicador-sync" class="badge" title="Status da sincronização">…</span>
       <button id="btn-abrir-casais" class="icone-coracao" title="Gerenciar casais" aria-label="Gerenciar casais" hidden>&#9825;</button>
+      <button id="btn-configurar-pontos" class="icone-engrenagem" title="Configurar pontos" aria-label="Configurar pontos" hidden>&#9881;</button>
     </div>
   </header>
 
@@ -30,6 +31,13 @@
       <button id="btn-adicionar-casal" class="primario">Adicionar casal</button>
       <p id="msg-adicionar-casal" class="msg"></p>
     </div>
+  </dialog>
+  <dialog id="popup-config-pontos" class="popup-casais">
+    <div class="cabecalho-popup"><h2>Configurar partida</h2><button id="btn-fechar-config-pontos" class="fechar-popup" aria-label="Fechar">&times;</button></div>
+    <label for="total-pontos-partida">Total de pontos por partida</label>
+    <input id="total-pontos-partida" type="number" min="1" max="999" step="1" />
+    <button id="btn-salvar-config-pontos" class="primario">Salvar configuração</button>
+    <p id="msg-config-pontos" class="msg"></p>
   </dialog>
 
   <dialog id="popup-vincular-pendente" class="popup-casais">
@@ -166,6 +174,7 @@
           <button id="btn-reiniciar-partida" class="secundario">Reiniciar partida</button>
           <button id="btn-nova-partida" class="secundario">Começar outra partida</button>
         </div>
+        <div class="linha linha-acoes"><button id="btn-desfazer-ponto" class="secundario">Desfazer</button></div>
         <p id="msg-pontos" class="msg"></p>
       </div>
       <div id="registro-ponto" class="card" hidden></div>
