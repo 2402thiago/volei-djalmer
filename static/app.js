@@ -612,25 +612,14 @@ function renderPresenca() {
 }
 
 $("btn-limpar-dados").addEventListener("click", () => {
-  if (!confirm("Tem certeza que deseja apagar todos os participantes e times? Essa ação não pode ser desfeita.")) return;
+  if (!confirm("Deseja limpar a lista atual de participantes, os times e a lista de presença? O Cadastro permanente e o nivelamento não serão apagados.")) return;
   localStorage.removeItem(STORAGE_PARTICIPANTES);
   localStorage.removeItem(STORAGE_TIMES);
-  localStorage.removeItem(STORAGE_CASAIS);
-  localStorage.removeItem(STORAGE_CASAIS_ATIVOS);
-  localStorage.removeItem(STORAGE_CASAIS_CONFIG);
   localStorage.removeItem(STORAGE_PRESENCA);
-  localStorage.removeItem(STORAGE_CADASTRO);
-  localStorage.removeItem(STORAGE_SHEETS_CONECTADO);
   participantes = [];
   participanteId = new Map();
   times = [];
   presenca = { assinatura: "", atletas: {}, ordem: [] };
-  sorteioComCasais = false;
-  casaisConfigurados = CASAIS_PADRAO.map((casal) => [...casal]);
-  casaisAtivos = casaisConfigurados.map(() => true);
-  cadastroAtletas = [];
-  sheetsConectado = false;
-  atualizarBotaoCasais();
   filtrosParticipantes.sexo = "";
   filtrosParticipantes.nivel = "";
   renderParticipantes();
@@ -639,7 +628,7 @@ $("btn-limpar-dados").addEventListener("click", () => {
   renderPresenca();
   document.querySelectorAll(".atalho-nivel").forEach((item) => item.classList.toggle("ativo", item.dataset.nivel === ""));
   document.querySelectorAll(".atalho-sexo").forEach((item) => item.classList.toggle("ativo", item.dataset.sexo === ""));
-  $("msg-limpar-dados").textContent = "Todos os dados foram apagados.";
+  $("msg-limpar-dados").textContent = "Lista de participantes, times e presença limpos. Cadastro preservado.";
 });
 
 async function carregarTimes() {
