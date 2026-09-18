@@ -8,12 +8,14 @@ from fastapi.staticfiles import StaticFiles
 
 from .runtime import runtime
 from .services import ErroDeDominio
+from .sheets_nivelamento import SheetsNivelamento
 
 BASE = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE / "static"
 
 
 app = FastAPI(title="Vôlei Djalmer", version="0.1.0")
+sheets_nivelamento = SheetsNivelamento()
 
 
 def _resposta(fn):
@@ -114,6 +116,35 @@ def composicao_time(id_: str):
 @app.get("/api/health")
 def health():
     return {"status": "ok", "env": runtime.modo}
+
+
+def cadastro_payload(payload: dict) -> list[dict]:
+    return payload.get("atletas", [])
+
+
+@app.post("/api/nivelamento/conectar")
+def conectar_nivelamento():
+    try:
+        sheets_nivelamento.conectar_resetar()
+        return {"ok": True, "mensagem": "Planilha preparada com a aba Nivelamento."}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/api/nivelamento/sincronizar")
+def sincronizar_nivelamento(payload: dict):
+    try:
+        return {"ok": True, **sheets_nivelamento.sincronizar(cadastro_payload(payload))}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.get("/api/nivelamento/importar")
+def importar_nivelamento():
+    try:
+        return {"ok": True, "atletas": sheets_nivelamento.importar()}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")

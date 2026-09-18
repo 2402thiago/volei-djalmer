@@ -101,11 +101,53 @@ const normalizarNome = (nome) => String(nome || "")
 
 const NIVEIS = ["C1", "M1", "M2", "F1", "F2", "LM1", "LF1"];
 const STORAGE_CADASTRO = "volei.cadastro.atletas.v1";
+const STORAGE_SHEETS_CONECTADO = "volei.sheets.conectado.v1";
 let cadastroAtletas = [];
+let sheetsConectado = localStorage.getItem(STORAGE_SHEETS_CONECTADO) === "true";
 const filtrosCadastro = { nivel: "", sexo: "" };
 const ORDEM_CADASTRO = ["C1", "M1", "F1", "M2", "F2", "LM1", "LF1"];
 
 function salvarCadastro() { localStorage.setItem(STORAGE_CADASTRO, JSON.stringify(cadastroAtletas)); }
+
+function payloadCadastro() {
+  return { atletas: cadastroAtletas.map((atleta, ordem) => ({ ...atleta, ordem, atualizado_em: new Date().toISOString() })) };
+}
+
+function mensagemSheets(texto, erro = false) {
+  $("msg-sheets").textContent = texto;
+  $("msg-sheets").className = erro ? "msg erro" : "msg";
+}
+
+async function executarSheets(acao) {
+  try { return await acao(); } catch (erro) { mensagemSheets(erro.message, true); return null; }
+}
+
+$("btn-conectar-sheets").addEventListener("click", () => executarSheets(async () => {
+  if (!confirm("Conectar apagará todas as abas e dados atuais da planilha Google e criará a aba Nivelamento. Deseja continuar?")) return;
+  await api.enviar("/api/nivelamento/conectar", "POST");
+  sheetsConectado = true;
+  localStorage.setItem(STORAGE_SHEETS_CONECTADO, "true");
+  mensagemSheets("Planilha conectada e preparada.");
+}));
+$("btn-desconectar-sheets").addEventListener("click", () => {
+  sheetsConectado = false;
+  localStorage.removeItem(STORAGE_SHEETS_CONECTADO);
+  mensagemSheets("Google Sheets desconectado neste navegador.");
+});
+$("btn-sincronizar-sheets").addEventListener("click", () => executarSheets(async () => {
+  if (!sheetsConectado) throw new Error("Conecte o Google Sheets antes de sincronizar.");
+  const resposta = await api.enviar("/api/nivelamento/sincronizar", "POST", payloadCadastro());
+  mensagemSheets(`${resposta.adicionados} novos e ${resposta.atualizados} atualizados na planilha.`);
+}));
+$("btn-importar-sheets").addEventListener("click", () => executarSheets(async () => {
+  if (!sheetsConectado) throw new Error("Conecte o Google Sheets antes de importar.");
+  if (!confirm("Importar substituirá o Cadastro local pelos dados da planilha. Deseja continuar?")) return;
+  const resposta = await api.get("/api/nivelamento/importar");
+  cadastroAtletas = resposta.atletas.sort((a, b) => a.ordem - b.ordem).map(({ ordem, atualizado_em, ...atleta }) => atleta);
+  salvarCadastro();
+  renderCadastro();
+  mensagemSheets(`${cadastroAtletas.length} atletas importados do Google Sheets.`);
+}));
 
 function carregarCadastro() {
   try { cadastroAtletas = JSON.parse(localStorage.getItem(STORAGE_CADASTRO) || "[]"); } catch { cadastroAtletas = []; }
@@ -570,6 +612,7 @@ $("btn-limpar-dados").addEventListener("click", () => {
   localStorage.removeItem(STORAGE_CASAIS_CONFIG);
   localStorage.removeItem(STORAGE_PRESENCA);
   localStorage.removeItem(STORAGE_CADASTRO);
+  localStorage.removeItem(STORAGE_SHEETS_CONECTADO);
   participantes = [];
   participanteId = new Map();
   times = [];
@@ -578,6 +621,7 @@ $("btn-limpar-dados").addEventListener("click", () => {
   casaisConfigurados = CASAIS_PADRAO.map((casal) => [...casal]);
   casaisAtivos = casaisConfigurados.map(() => true);
   cadastroAtletas = [];
+  sheetsConectado = false;
   atualizarBotaoCasais();
   filtrosParticipantes.sexo = "";
   filtrosParticipantes.nivel = "";

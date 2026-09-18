@@ -74,7 +74,14 @@
       </div>
       <div class="card acao dados-locais">
         <label>Dados do site</label>
-        <button id="btn-limpar-dados" class="perigo">Limpar todos os dados</button>
+        <div class="linha linha-acoes">
+          <button id="btn-conectar-sheets" class="secundario">Conectar</button>
+          <button id="btn-desconectar-sheets" class="secundario">Desconectar</button>
+          <button id="btn-sincronizar-sheets" class="secundario">Sincronizar</button>
+          <button id="btn-importar-sheets" class="secundario">Importar dados</button>
+          <button id="btn-limpar-dados" class="perigo">Limpar todos os dados</button>
+        </div>
+        <p id="msg-sheets" class="msg"></p>
         <p id="msg-limpar-dados" class="msg"></p>
       </div>
       <div class="card resumo-participantes">
