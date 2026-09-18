@@ -146,6 +146,7 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .linha-times-pontos { margin-bottom: 8px; }
 .controle-time-ponto { display: grid; flex: 1; gap: 8px; }
 .controle-time-ponto select, .controle-time-ponto button { width: 100%; }
+.acoes-partida-pontos { margin-top: 8px; }
 .atletas-ponto { margin-top: 12px; }
 .fundamentos-ponto { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-top: 8px; }
 .fundamentos-ponto .atleta-presenca { text-align: center; }

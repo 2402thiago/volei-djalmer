@@ -795,10 +795,12 @@ let times = [];
 const STORAGE_TIMES = "volei.times.v1";
 const STORAGE_PRESENCA = "volei.presenca.v1";
 const STORAGE_PONTOS = "volei.pontos.v1";
+const STORAGE_PARTIDA_PONTOS = "volei.partida.pontos.v1";
 let presenca = { assinatura: "", atletas: {}, ordem: [] };
 let pontos = [];
 let partidaPontos = { timeA: "", timeB: "" };
 let registroPonto = null;
+try { partidaPontos = JSON.parse(localStorage.getItem(STORAGE_PARTIDA_PONTOS) || "null") || partidaPontos; } catch { /* Usa a partida padrão. */ }
 function salvarTimesLocais() { localStorage.setItem(STORAGE_TIMES, JSON.stringify(times)); }
 
 function assinaturaTimes() {
@@ -824,6 +826,7 @@ function carregarPresenca() {
 }
 
 function salvarPontos() { localStorage.setItem(STORAGE_PONTOS, JSON.stringify(pontos)); }
+function salvarPartidaPontos() { localStorage.setItem(STORAGE_PARTIDA_PONTOS, JSON.stringify(partidaPontos)); }
 
 function carregarPontos() {
   try { pontos = JSON.parse(localStorage.getItem(STORAGE_PONTOS) || "[]"); } catch { pontos = []; }
@@ -846,6 +849,15 @@ function garantirTimesDaPartida() {
   if (!times.some((time) => time.id === partidaPontos.timeB) || partidaPontos.timeB === partidaPontos.timeA) {
     partidaPontos.timeB = times.find((time) => time.id !== partidaPontos.timeA)?.id || "";
   }
+  salvarPartidaPontos();
+}
+
+function limparPontosDaPartida() {
+  const chave = chavePartida();
+  pontos = pontos.filter((ponto) => ponto.partida !== chave);
+  salvarPontos();
+  registroPonto = null;
+  renderPontos();
 }
 
 function chavePartida() {
@@ -900,10 +912,12 @@ function renderPontos() {
   const seletorB = $("pontos-time-b");
   const botaoA = $("btn-ponto-time-a");
   const botaoB = $("btn-ponto-time-b");
+  const botaoReiniciar = $("btn-reiniciar-partida");
+  const botaoNova = $("btn-nova-partida");
   const mensagem = $("msg-pontos");
   const registro = $("registro-ponto");
   const historico = $("historico-pontos");
-  if (!seletorA || !seletorB || !botaoA || !botaoB || !mensagem || !registro || !historico) return;
+  if (!seletorA || !seletorB || !botaoA || !botaoB || !botaoReiniciar || !botaoNova || !mensagem || !registro || !historico) return;
 
   garantirTimesDaPartida();
   if (times.length < 2) {
@@ -911,6 +925,8 @@ function renderPontos() {
     seletorB.innerHTML = '<option>Times não sorteados</option>';
     botaoA.disabled = true;
     botaoB.disabled = true;
+    botaoReiniciar.disabled = true;
+    botaoNova.disabled = true;
     mensagem.textContent = "Sorteie os times antes de registrar pontos.";
     registro.hidden = true;
     historico.innerHTML = "";
@@ -926,6 +942,8 @@ function renderPontos() {
   const timeB = timePorId(partidaPontos.timeB);
   botaoA.disabled = false;
   botaoB.disabled = false;
+  botaoReiniciar.disabled = false;
+  botaoNova.disabled = false;
   botaoA.textContent = "Ponto";
   botaoB.textContent = "Ponto";
   mensagem.textContent = "Clique no time que pontuou, selecione o atleta e depois o fundamento.";
@@ -986,6 +1004,22 @@ $("pontos-time-a").addEventListener("change", () => {
 $("pontos-time-b").addEventListener("change", () => {
   partidaPontos.timeB = $("pontos-time-b").value;
   garantirTimesDaPartida();
+  registroPonto = null;
+  renderPontos();
+});
+
+$("btn-reiniciar-partida").addEventListener("click", () => {
+  if (!confirm("Reiniciar a partida apagará o placar e o histórico atuais. Deseja continuar?")) return;
+  limparPontosDaPartida();
+});
+
+$("btn-nova-partida").addEventListener("click", () => {
+  if (!confirm("Começar outra partida apagará o placar e o histórico atuais. Deseja continuar?")) return;
+  pontos = [];
+  salvarPontos();
+  const primeiroTime = times[0]?.id || "";
+  partidaPontos = { timeA: primeiroTime, timeB: times.find((time) => time.id !== primeiroTime)?.id || "" };
+  salvarPartidaPontos();
   registroPonto = null;
   renderPontos();
 });
