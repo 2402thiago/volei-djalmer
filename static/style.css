@@ -151,6 +151,7 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .atleta-cadastro.arrastando { opacity: 0.45; }
 .atleta-cadastro.alvo-arraste { border-color: var(--acento); box-shadow: 0 0 0 2px var(--acento-suave); }
 .cabecalho-cadastro { display: flex; justify-content: space-between; gap: 8px; font-weight: 600; }
+.cabecalho-cadastro h2 { font-size: 17px; }
 .det-cadastro { font-size: 12px; color: var(--texto-suave); }
 .potes-adicionais { display: flex; flex-wrap: wrap; gap: 7px; }
 .potes-adicionais label { display: flex; gap: 4px; align-items: center; font-size: 12px; }

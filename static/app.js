@@ -695,6 +695,29 @@ function gerarMensagemParticipantes() {
   return ["*Lista de participantes - Vôlei Djalma*", ...secoes].join("\n\n");
 }
 
+function gerarMensagemCadastro() {
+  const linhas = cadastroAtletas.map((atleta, indice) => `${indice + 1}. ${atleta.nome}${atleta.pote ? ` - ${atleta.pote}` : ""}`);
+  return ["*Lista única de nivelamento - Vôlei Djalmer*", ...linhas].join("\n");
+}
+
+$("btn-compartilhar-cadastro").addEventListener("click", async () => {
+  if (!cadastroAtletas.length) {
+    alert("Não há atletas cadastrados para compartilhar.");
+    return;
+  }
+  const mensagem = gerarMensagemCadastro();
+  try {
+    if (navigator.share) {
+      await navigator.share({ text: mensagem });
+      return;
+    }
+    await navigator.clipboard.writeText(mensagem);
+  } catch {
+    // O WhatsApp continua disponível quando o compartilhamento nativo falha.
+  }
+  window.open(`https://wa.me/?text=${encodeURIComponent(mensagem)}`, "_blank");
+});
+
 async function editarParticipante(id, alteracoes) {
   try {
     const p = participantes.find((item) => item.id === id);
