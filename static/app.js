@@ -203,6 +203,26 @@ function encontrarCadastro(nome) {
   return cadastroAtletas.find((atleta) => normalizarNome(atleta.nome) === chave || atleta.aliases.some((alias) => normalizarNome(alias) === chave));
 }
 
+function atualizarParticipantesDoCadastro() {
+  let atualizados = 0;
+  participantes.forEach((participante) => {
+    const atleta = cadastroAtletas.find((item) => item.id === participante.cadastro_id || item.id === participante.id) || encontrarCadastro(participante.nome);
+    if (!atleta) return;
+    participante.id = atleta.id;
+    participante.cadastro_id = atleta.id;
+    participante.nome = atleta.nome;
+    participante.sexo = atleta.sexo;
+    participante.nivel = atleta.pote || null;
+    participante.ranking = cadastroAtletas.indexOf(atleta) + 1;
+    participante.potes_adicionais = atleta.potesAdicionais;
+    participante.atualizado_em = new Date().toISOString();
+    atualizados += 1;
+  });
+  salvarParticipantesLocais();
+  renderParticipantes();
+  return atualizados;
+}
+
 function buscarCadastro(termo) {
   const chave = normalizarNome(termo);
   if (!chave) return cadastroAtletas;
@@ -639,6 +659,12 @@ $("btn-compartilhar").addEventListener("click", async () => {
   window.open(`https://wa.me/?text=${encodeURIComponent(mensagem)}`, "_blank");
 });
 
+$("btn-atualizar-lista").addEventListener("click", () => {
+  const atualizados = atualizarParticipantesDoCadastro();
+  $("msg-importar").textContent = `${atualizados} atleta(s) atualizados com os dados do Cadastro.`;
+  $("msg-importar").className = "msg";
+});
+
 document.querySelectorAll(".atalho-nivel").forEach((botao) => {
   botao.addEventListener("click", () => {
     filtrosParticipantes.nivel = botao.dataset.nivel;
@@ -808,6 +834,7 @@ $('btn-compartilhar-times').addEventListener("click", async () => {
 });
 
 function montarTimesLocais() {
+  atualizarParticipantesDoCadastro();
   const ativos = participantes.filter((p) => p.status === "ativo");
   const problemas = [];
   if (ativos.length !== 24) problemas.push(`- Atletas ativos: ${ativos.length}; são necessários 24.`);
