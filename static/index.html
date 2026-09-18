@@ -57,6 +57,7 @@
   <nav class="abas">
     <button data-tela="dashboard" class="aba ativa">Times</button>
     <button data-tela="participantes" class="aba">Participantes</button>
+    <button data-tela="pontos" class="aba">Pontos</button>
     <button data-tela="presenca" class="aba">Presença</button>
     <button data-tela="cadastro" class="aba">Cadastro</button>
   </nav>
@@ -146,6 +147,23 @@
         <p class="msg">Confirme os atletas. Cada time completo recebe a próxima posição de entrada.</p>
       </div>
       <div id="lista-presenca" class="lista-presenca"></div>
+    </section>
+
+    <section id="pontos" class="tela">
+      <div class="card acao">
+        <label>Partida</label>
+        <div class="linha linha-times-pontos">
+          <select id="pontos-time-a" aria-label="Primeiro time da partida"></select>
+          <select id="pontos-time-b" aria-label="Segundo time da partida"></select>
+        </div>
+        <div class="linha linha-acoes">
+          <button id="btn-ponto-time-a" class="primario">Ponto</button>
+          <button id="btn-ponto-time-b" class="primario">Ponto</button>
+        </div>
+        <p id="msg-pontos" class="msg"></p>
+      </div>
+      <div id="registro-ponto" class="card" hidden></div>
+      <div id="historico-pontos"></div>
     </section>
 
     <section id="cadastro" class="tela">
