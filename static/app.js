@@ -171,7 +171,7 @@ async function executarComProgresso(titulo, acao) {
   const painel = $("progresso-tarefa");
   const etapa = $("etapa-progresso");
   painel.hidden = false;
-  painel.classList.remove("minimizado");
+  painel.classList.remove("minimizado", "concluido", "falhou");
   $("titulo-progresso").textContent = titulo;
   $("btn-fechar-progresso").hidden = true;
   etapa.className = "msg";
@@ -179,10 +179,14 @@ async function executarComProgresso(titulo, acao) {
   try {
     const resultado = await acao((mensagem) => { etapa.textContent = mensagem; });
     etapa.textContent = resultado || "Operação concluída.";
+    painel.classList.add("concluido");
+    $("titulo-progresso").textContent = `${titulo}: concluído`;
     $("btn-fechar-progresso").hidden = false;
   } catch (erro) {
     etapa.textContent = erro.message;
     etapa.className = "msg erro";
+    painel.classList.add("falhou");
+    $("titulo-progresso").textContent = `${titulo}: erro`;
     $("btn-fechar-progresso").hidden = false;
   } finally {
     tarefaEmAndamento = false;
@@ -282,6 +286,7 @@ function aplicarPotesDoSorteio() {
   if (pendencias.length) throw new Error(`Atletas pendentes de cadastro ou nivelamento: ${pendencias.map((p) => p.nome).join(", ")}.`);
   const atribuicoes = calcularAtribuicaoPotes(ativos);
   ativos.forEach((p) => { p.pote_sorteio = atribuicoes.get(p.id); });
+  criarTimesComRestricoes(ativos);
   salvarParticipantesLocais();
   renderParticipantes();
 }
@@ -954,6 +959,70 @@ function calcularAtribuicaoPotes(ativos) {
   return atribuicoes;
 }
 
+function criarTimesComRestricoes(ativos) {
+  const categorias = ["C1", "M1", "F1", "M2", "M2F2", "levantadores"];
+  const forcaGlobal = (p) => ativos.length - p.ranking + 1;
+  const embaralhar = (itens) => [...itens].sort(() => Math.random() - 0.5);
+  const alvosFemininos = Array(4).fill(Math.floor(ativos.filter((p) => p.sexo === "F").length / 4));
+  embaralhar([0, 1, 2, 3]).slice(0, ativos.filter((p) => p.sexo === "F").length % 4).forEach((time) => { alvosFemininos[time] += 1; });
+  const porNome = new Map(ativos.map((p) => [normalizarNome(p.nome), p]));
+  const unidades = [];
+  const usados = new Set();
+  const ausentes = [];
+  if (sorteioComCasais) {
+    casaisConfigurados.forEach((casal, indice) => {
+      if (!casaisAtivos[indice]) return;
+      const primeiro = porNome.get(normalizarNome(casal[0]));
+      const segundo = porNome.get(normalizarNome(casal[1]));
+      if (!primeiro || !segundo) { ausentes.push(`${casal[0]} e ${casal[1]}`); return; }
+      unidades.push([primeiro, segundo]);
+      usados.add(primeiro.id);
+      usados.add(segundo.id);
+    });
+  }
+  ativos.filter((p) => !usados.has(p.id)).forEach((p) => unidades.push([p]));
+  unidades.sort((a, b) => b.length - a.length || b.reduce((s, p) => s + forcaGlobal(p), 0) - a.reduce((s, p) => s + forcaGlobal(p), 0));
+
+  const timesNovos = [0, 1, 2, 3].map((indice) => ({ id: novoId(), nome: `Time ${indice + 1}`, jogadores: [], nivel_medio: "0.00" }));
+  const distribuicao = timesNovos.map(() => Object.fromEntries(categorias.map((categoria) => [categoria, 0])));
+  let tentativas = 0;
+  const distribuir = (indice) => {
+    if (indice === unidades.length) return true;
+    if (++tentativas > 100000) return false;
+    const unidade = unidades[indice];
+    const porCategoria = unidade.reduce((totais, p) => {
+      totais[p.pote_sorteio] = (totais[p.pote_sorteio] || 0) + 1;
+      return totais;
+    }, {});
+    const mulheres = unidade.filter((p) => p.sexo === "F").length;
+    const candidatos = [0, 1, 2, 3].filter((time) => timesNovos[time].jogadores.length + unidade.length <= 6 &&
+      mulheres + timesNovos[time].jogadores.filter((p) => p.sexo === "F").length <= alvosFemininos[time] &&
+      Object.entries(porCategoria).every(([categoria, quantidade]) => distribuicao[time][categoria] + quantidade <= 1)
+    ).sort((a, b) => {
+      const forcaA = timesNovos[a].jogadores.reduce((s, p) => s + forcaGlobal(p), 0);
+      const forcaB = timesNovos[b].jogadores.reduce((s, p) => s + forcaGlobal(p), 0);
+      return forcaA - forcaB || Math.random() - 0.5;
+    });
+    return candidatos.some((time) => {
+      timesNovos[time].jogadores.push(...unidade);
+      Object.entries(porCategoria).forEach(([categoria, quantidade]) => { distribuicao[time][categoria] += quantidade; });
+      if (distribuir(indice + 1)) return true;
+      timesNovos[time].jogadores.splice(-unidade.length);
+      Object.entries(porCategoria).forEach(([categoria, quantidade]) => { distribuicao[time][categoria] -= quantidade; });
+      return false;
+    });
+  };
+
+  if (!distribuir(0)) {
+    throw new Error("Não foi possível formar os times respeitando potes, casais e equilíbrio de gênero. Revise as permissões de pote ou desative algum casal.");
+  }
+  timesNovos.forEach((time) => {
+    time.jogadores.sort((a, b) => a.ranking - b.ranking);
+    time.nivel_medio = (time.jogadores.reduce((sum, p) => sum + forcaGlobal(p), 0) / 6).toFixed(2);
+  });
+  return { times: timesNovos, ausentes };
+}
+
 function montarTimesLocais() {
   atualizarParticipantesDoCadastro();
   const ativos = participantes.filter((p) => p.status === "ativo");
@@ -978,76 +1047,9 @@ function montarTimesLocais() {
     p.pote_sorteio = atribuicoes.get(p.id);
     p.promovido_de = p.pote_sorteio === p.nivel || (p.nivel === "M2" && p.pote_sorteio === "M2F2") || ((p.nivel === "LM1" || p.nivel === "LF1") && p.pote_sorteio === "levantadores") ? null : p.nivel;
   });
-  const forcaGlobal = (p) => ativos.length - p.ranking + 1;
-  const categoriasSorteio = ["C1", "M1", "F1", "M2", "M2F2", "levantadores"];
-  const potes = categoriasSorteio.map((categoria) => ativos.filter((p) => p.pote_sorteio === categoria).sort((a, b) => a.ranking - b.ranking));
-  const novos = [0, 1, 2, 3].map((indice) => ({ id: novoId(), nome: `Time ${indice + 1}`, jogadores: [], nivel_medio: "0.00" }));
-  if (!sorteioComCasais) {
-    potes.forEach((pote) => {
-      const inicio = Math.floor(Math.random() * 4);
-      pote.forEach((atleta, index) => novos[(inicio + index) % 4].jogadores.push(atleta));
-    });
-  } else {
-    const porNome = new Map(ativos.map((p) => [normalizarNome(p.nome), p]));
-    const unidades = [];
-    const usados = new Set();
-    const ausentes = [];
-    casaisConfigurados.forEach((casal, indice) => {
-      if (!casaisAtivos[indice]) return;
-      const primeiro = porNome.get(normalizarNome(casal[0]));
-      const segundo = porNome.get(normalizarNome(casal[1]));
-      if (!primeiro || !segundo) { ausentes.push(`${casal[0]} e ${casal[1]}`); return; }
-      unidades.push([primeiro, segundo]);
-      usados.add(primeiro.id); usados.add(segundo.id);
-    });
-    ativos.filter((p) => !usados.has(p.id)).forEach((p) => unidades.push([p]));
-    const categoria = (p) => {
-      return p.pote_sorteio;
-    };
-    const embaralhar = (itens) => [...itens].sort(() => Math.random() - 0.5);
-    const grupos = ["C1", "M1", "F1", "M2", "M2F2", "levantadores"];
-    const metas = Object.fromEntries(grupos.map((grupo) => [grupo, Array(4).fill(1)]));
-    const distribuicao = novos.map(() => ({ C1: 0, M1: 0, F1: 0, M2: 0, M2F2: 0, levantadores: 0 }));
-    unidades.sort((a, b) => b.length - a.length || b.reduce((s, p) => s + forcaGlobal(p), 0) - a.reduce((s, p) => s + forcaGlobal(p), 0));
-    let tentativas = 0;
-    const distribuir = (indice) => {
-      if (indice === unidades.length) return true;
-      if (++tentativas > 100000) return false;
-      const unidade = unidades[indice];
-      const porGrupo = unidade.reduce((totais, p) => {
-        const grupo = categoria(p);
-        totais[grupo] = (totais[grupo] || 0) + 1;
-        return totais;
-      }, {});
-      const candidatos = [0, 1, 2, 3].filter((time) => novos[time].jogadores.length + unidade.length <= 6 &&
-        Object.entries(porGrupo).every(([grupo, quantidade]) => distribuicao[time][grupo] + quantidade <= metas[grupo][time])
-      ).sort((a, b) => {
-        const forcaA = novos[a].jogadores.reduce((s, p) => s + forcaGlobal(p), 0);
-        const forcaB = novos[b].jogadores.reduce((s, p) => s + forcaGlobal(p), 0);
-        return forcaA - forcaB || Math.random() - 0.5;
-      });
-      return candidatos.some((time) => {
-        novos[time].jogadores.push(...unidade);
-        Object.entries(porGrupo).forEach(([grupo, quantidade]) => { distribuicao[time][grupo] += quantidade; });
-        if (distribuir(indice + 1)) return true;
-        novos[time].jogadores.splice(-unidade.length);
-        Object.entries(porGrupo).forEach(([grupo, quantidade]) => { distribuicao[time][grupo] -= quantidade; });
-        return false;
-      });
-    };
-    if (!distribuir(0)) {
-      throw new Error('Não foi possível sortear mantendo os casais ativos e o nivelamento dos potes.\nRevise os casais em "Editar casais" e desative algum casal para continuar.');
-    }
-    $("msg-casais").textContent = ausentes.length ? `Casais não encontrados: ${ausentes.join(", ")}.` : "Casais ativos permanecem no mesmo time.";
-  }
-  if (novos.some((time) => time.jogadores.length !== 6)) {
-    throw new Error(`Não foi possível sortear os times.\nDistribuição final: ${novos.map((time) => `${time.nome}: ${time.jogadores.length} atletas`).join(", ")}.`);
-  }
-  novos.forEach((time) => {
-    time.jogadores.sort((a, b) => a.ranking - b.ranking);
-    time.nivel_medio = (time.jogadores.reduce((sum, p) => sum + forcaGlobal(p), 0) / 6).toFixed(2);
-  });
-  return novos;
+  const resultado = criarTimesComRestricoes(ativos);
+  $("msg-casais").textContent = resultado.ausentes.length ? `Casais não encontrados: ${resultado.ausentes.join(", ")}.` : (sorteioComCasais ? "Casais ativos permanecem no mesmo time." : "");
+  return resultado.times;
 }
 
 $("btn-montar").addEventListener("click", async () => {

@@ -164,6 +164,8 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .progresso-tarefa.minimizado #etapa-progresso, .progresso-tarefa.minimizado .barra-progresso { display: none; }
 .barra-progresso { height: 5px; overflow: hidden; border-radius: 999px; background: var(--acento-suave); margin-top: 10px; }
 .barra-progresso span { display: block; width: 45%; height: 100%; border-radius: inherit; background: var(--acento); animation: progresso 1.1s ease-in-out infinite alternate; }
+.progresso-tarefa.concluido .barra-progresso span { width: 100%; transform: none; background: #278749; animation: none; }
+.progresso-tarefa.falhou .barra-progresso span { width: 100%; transform: none; background: var(--perigo); animation: none; }
 @keyframes progresso { from { transform: translateX(-30%); } to { transform: translateX(150%); } }
 .atalho-cadastro, .atalho-cadastro-sexo { padding: 7px 10px; border-radius: 999px; color: var(--texto-suave); }
 .atalho-cadastro.ativo, .atalho-cadastro-sexo.ativo { background: var(--acento); border-color: var(--acento); color: #fff; font-weight: 600; }
