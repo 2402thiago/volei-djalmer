@@ -153,12 +153,14 @@
       <div class="card acao">
         <label>Partida</label>
         <div class="linha linha-times-pontos">
-          <select id="pontos-time-a" aria-label="Primeiro time da partida"></select>
-          <select id="pontos-time-b" aria-label="Segundo time da partida"></select>
-        </div>
-        <div class="linha linha-acoes">
-          <button id="btn-ponto-time-a" class="primario">Ponto</button>
-          <button id="btn-ponto-time-b" class="primario">Ponto</button>
+          <div class="controle-time-ponto">
+            <select id="pontos-time-a" aria-label="Primeiro time da partida"></select>
+            <button id="btn-ponto-time-a" class="primario">Ponto</button>
+          </div>
+          <div class="controle-time-ponto">
+            <select id="pontos-time-b" aria-label="Segundo time da partida"></select>
+            <button id="btn-ponto-time-b" class="primario">Ponto</button>
+          </div>
         </div>
         <p id="msg-pontos" class="msg"></p>
       </div>

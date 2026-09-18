@@ -926,8 +926,8 @@ function renderPontos() {
   const timeB = timePorId(partidaPontos.timeB);
   botaoA.disabled = false;
   botaoB.disabled = false;
-  botaoA.textContent = `Ponto ${timeA.nome}`;
-  botaoB.textContent = `Ponto ${timeB.nome}`;
+  botaoA.textContent = "Ponto";
+  botaoB.textContent = "Ponto";
   mensagem.textContent = "Clique no time que pontuou, selecione o atleta e depois o fundamento.";
 
   if (registroPonto) {
