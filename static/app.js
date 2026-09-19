@@ -880,13 +880,16 @@ function iniciarRegistroPonto(timeId) {
 
 function outroTime(timeId) { return times.find((time) => time.id !== timeId && [partidaPontos.timeA, partidaPontos.timeB].includes(time.id)); }
 
+function idTimePonto(ponto) { return ponto.time_ponto_id || ponto.time_id; }
+function nomeTimePonto(ponto) { return ponto.time_ponto_nome || ponto.time_nome; }
+
 function registrarPonto(fundamento) {
-  const time = timePorId(registroPonto?.timeId);
-  const atleta = time?.jogadores.find((jogador) => jogador.id === registroPonto.atletaId);
-  if (!time || !atleta) return;
-  const timePonto = registroPonto.modo === "contra" ? outroTime(time.id) : time;
+  const timePonto = timePorId(registroPonto?.timeId);
+  const timeAtleta = registroPonto?.modo === "contra" ? outroTime(timePonto?.id) : timePonto;
+  const atleta = timeAtleta?.jogadores.find((jogador) => jogador.id === registroPonto.atletaId);
+  if (!timePonto || !timeAtleta || !atleta) return;
   pontos.push({
-    id: novoId(), partida: chavePartida(), time_id: time.id, time_nome: time.nome,
+    id: novoId(), partida: chavePartida(), time_id: timeAtleta.id, time_nome: timeAtleta.nome,
     time_ponto_id: timePonto.id, time_ponto_nome: timePonto.nome,
     atleta_id: atleta.id, atleta_nome: atleta.nome, fundamento: fundamento || null,
     modo: registroPonto.modo, registrado_em: new Date().toISOString(),
@@ -904,7 +907,7 @@ function resumoAtletasPontos(eventos) {
     if (ponto.modo === "contra") resumo.erros += 1;
     else {
       resumo.total += 1;
-      resumo[ponto.fundamento] += 1;
+      if (ponto.fundamento in resumo) resumo[ponto.fundamento] += 1;
     }
   });
   return [...atletas.values()].sort((a, b) => b.total - a.total || a.nome.localeCompare(b.nome));
@@ -914,7 +917,7 @@ function mensagemResumoPontos() {
   const timeA = timePorId(partidaPontos.timeA);
   const timeB = timePorId(partidaPontos.timeB);
   const eventos = pontosDaPartida();
-  const total = (time) => eventos.filter((ponto) => ponto.time_id === time.id).length;
+  const total = (time) => eventos.filter((ponto) => idTimePonto(ponto) === time.id).length;
   const atletas = resumoAtletasPontos(eventos).map((atleta) => `${atleta.nome}: ${atleta.total} ponto${atleta.total === 1 ? "" : "s"} (${atleta.Saque} saque${atleta.Saque === 1 ? "" : "s"}, ${atleta.Bloqueio} bloqueio${atleta.Bloqueio === 1 ? "" : "s"}, ${atleta.Ataque} ataque${atleta.Ataque === 1 ? "" : "s"})${atleta.erros ? `, ${atleta.erros} erro${atleta.erros === 1 ? "" : "s"}` : ""}`);
   return ["*Resumo da partida - Vôlei Djalmer*", "", `${timeA.nome}: ${total(timeA)} pontos`, `${timeB.nome}: ${total(timeB)} pontos`, "", "*Pontuação por atleta*", ...atletas].join("\n");
 }
@@ -968,8 +971,8 @@ function renderPontos() {
     if (!time) registroPonto = null;
     else {
       registro.hidden = false;
-      const atleta = time.jogadores.find((jogador) => jogador.id === registroPonto.atletaId);
       const timeAtletas = registroPonto.modo === "contra" ? outroTime(time.id) : time;
+      const atleta = timeAtletas?.jogadores.find((jogador) => jogador.id === registroPonto.atletaId);
       registro.innerHTML = registroPonto.modo === "escolha"
         ? `<h2>Tipo de ponto</h2><div class="opcoes-tipo-ponto"><button class="atleta-presenca" data-modo="direto">Ponto direto</button><button class="atleta-presenca" data-modo="contra">Ponto contra</button></div>`
         : `<h2>${registroPonto.modo === "contra" ? "Quem cometeu o erro?" : `Quem fez o ponto de ${esc(time.nome)}?`}</h2><div class="atletas-presenca atletas-ponto"></div>${atleta && registroPonto.modo === "direto" ? `<h3>Fundamento de ${esc(atleta.nome)}</h3><div class="fundamentos-ponto"><button class="atleta-presenca" data-fundamento="Saque">Saque</button><button class="atleta-presenca" data-fundamento="Bloqueio">Bloqueio</button><button class="atleta-presenca" data-fundamento="Ataque">Ataque</button></div>` : ""}`;
@@ -995,9 +998,9 @@ function renderPontos() {
   }
 
   const eventos = pontosDaPartida();
-  const total = (time) => eventos.filter((ponto) => ponto.time_ponto_id === time.id).length;
+  const total = (time) => eventos.filter((ponto) => idTimePonto(ponto) === time.id).length;
   const linhas = resumoAtletasPontos(eventos).map((atleta) => `<tr><th scope="row">${esc(atleta.nome)}<small>${esc(atleta.time)}</small></th><td>${atleta.total}</td><td>${atleta.Saque}</td><td>${atleta.Bloqueio}</td><td>${atleta.Ataque}</td><td>${atleta.erros}</td></tr>`).join("");
-  const lances = [...eventos].reverse().map((ponto) => `<li><strong>${esc(ponto.time_ponto_nome)}</strong>: ${ponto.modo === "contra" ? `erro de ${esc(ponto.atleta_nome)}` : `${esc(ponto.atleta_nome)} - ${esc(ponto.fundamento)}`}</li>`).join("");
+  const lances = [...eventos].reverse().map((ponto) => `<li><strong>${esc(nomeTimePonto(ponto))}</strong>: ${ponto.modo === "contra" ? `erro de ${esc(ponto.atleta_nome)}` : `${esc(ponto.atleta_nome)} - ${esc(ponto.fundamento)}`}</li>`).join("");
   historico.innerHTML = `<div class="card historico-pontos"><div class="cabecalho-cadastro"><h2>Histórico da partida</h2><button id="btn-compartilhar-pontos" class="secundario" ${eventos.length ? "" : "disabled"}>Compartilhar resumo</button></div><p class="msg">Meta: ${totalPontosPartida} pontos</p><div class="placar-pontos"><strong>${esc(timeA.nome)} <span>${total(timeA)}</span></strong><strong>${esc(timeB.nome)} <span>${total(timeB)}</span></strong></div>${eventos.length ? `<div class="tabela-resumo"><table><thead><tr><th>Atleta</th><th>Total</th><th>Saque</th><th>Bloqueio</th><th>Ataque</th><th>Erros</th></tr></thead><tbody>${linhas}</tbody></table></div><ul class="lances-pontos">${lances}</ul>` : '<p class="msg">Nenhum ponto registrado nesta partida.</p>'}</div>`;
   $("btn-compartilhar-pontos")?.addEventListener("click", async () => {
     const texto = mensagemResumoPontos();
@@ -1034,7 +1037,7 @@ $("btn-reiniciar-partida").addEventListener("click", () => {
 });
 
 $("btn-nova-partida").addEventListener("click", () => {
-  if (!confirm("Começar outra partida apagará o placar e o histórico atuais. Deseja continuar?")) return;
+  if (!confirm("Começar partida apagará o placar e o histórico atuais. Deseja continuar?")) return;
   pontos = [];
   salvarPontos();
   const primeiroTime = times[0]?.id || "";
