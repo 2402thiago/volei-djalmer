@@ -971,7 +971,7 @@ function renderPontos() {
       const atleta = time.jogadores.find((jogador) => jogador.id === registroPonto.atletaId);
       const timeAtletas = registroPonto.modo === "contra" ? outroTime(time.id) : time;
       registro.innerHTML = registroPonto.modo === "escolha"
-        ? `<h2>Tipo de ponto</h2><div class="fundamentos-ponto"><button class="atleta-presenca" data-modo="direto">Ponto direto</button><button class="atleta-presenca" data-modo="contra">Ponto contra</button></div>`
+        ? `<h2>Tipo de ponto</h2><div class="opcoes-tipo-ponto"><button class="atleta-presenca" data-modo="direto">Ponto direto</button><button class="atleta-presenca" data-modo="contra">Ponto contra</button></div>`
         : `<h2>${registroPonto.modo === "contra" ? "Quem cometeu o erro?" : `Quem fez o ponto de ${esc(time.nome)}?`}</h2><div class="atletas-presenca atletas-ponto"></div>${atleta && registroPonto.modo === "direto" ? `<h3>Fundamento de ${esc(atleta.nome)}</h3><div class="fundamentos-ponto"><button class="atleta-presenca" data-fundamento="Saque">Saque</button><button class="atleta-presenca" data-fundamento="Bloqueio">Bloqueio</button><button class="atleta-presenca" data-fundamento="Ataque">Ataque</button></div>` : ""}`;
       registro.querySelectorAll("[data-modo]").forEach((botao) => botao.addEventListener("click", () => { registroPonto.modo = botao.dataset.modo; renderPontos(); }));
       const atletas = registro.querySelector(".atletas-ponto");
