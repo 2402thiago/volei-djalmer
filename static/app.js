@@ -798,6 +798,7 @@ const STORAGE_PRESENCA = "volei.presenca.v1";
 const STORAGE_PONTOS = "volei.pontos.v1";
 const STORAGE_PARTIDA_PONTOS = "volei.partida.pontos.v1";
 const STORAGE_TOTAL_PONTOS = "volei.total.pontos.v1";
+const STORAGE_PARTIDAS_ENCERRADAS = "volei.partidas.encerradas.v1";
 let presenca = { assinatura: "", atletas: {}, ordem: [] };
 let pontos = [];
 let partidaPontos = { timeA: "", timeB: "" };
@@ -805,6 +806,9 @@ let registroPonto = null;
 let totalPontosPartida = Number(localStorage.getItem(STORAGE_TOTAL_PONTOS) || 25);
 if (!Number.isInteger(totalPontosPartida) || totalPontosPartida < 1) totalPontosPartida = 25;
 try { partidaPontos = JSON.parse(localStorage.getItem(STORAGE_PARTIDA_PONTOS) || "null") || partidaPontos; } catch { /* Usa a partida padrão. */ }
+let partidasEncerradas;
+try { partidasEncerradas = JSON.parse(localStorage.getItem(STORAGE_PARTIDAS_ENCERRADAS) || "{}") || {}; } catch { partidasEncerradas = {}; }
+if (typeof partidasEncerradas !== "object" || Array.isArray(partidasEncerradas)) partidasEncerradas = {};
 function salvarTimesLocais() { localStorage.setItem(STORAGE_TIMES, JSON.stringify(times)); }
 
 function assinaturaTimes() {
@@ -831,6 +835,7 @@ function carregarPresenca() {
 
 function salvarPontos() { localStorage.setItem(STORAGE_PONTOS, JSON.stringify(pontos)); }
 function salvarPartidaPontos() { localStorage.setItem(STORAGE_PARTIDA_PONTOS, JSON.stringify(partidaPontos)); }
+function salvarPartidasEncerradas() { localStorage.setItem(STORAGE_PARTIDAS_ENCERRADAS, JSON.stringify(partidasEncerradas)); }
 
 function carregarPontos() {
   try { pontos = JSON.parse(localStorage.getItem(STORAGE_PONTOS) || "[]"); } catch { pontos = []; }
@@ -859,7 +864,9 @@ function garantirTimesDaPartida() {
 function limparPontosDaPartida() {
   const chave = chavePartida();
   pontos = pontos.filter((ponto) => ponto.partida !== chave);
+  delete partidasEncerradas[chave];
   salvarPontos();
+  salvarPartidasEncerradas();
   registroPonto = null;
   renderPontos();
 }
@@ -873,7 +880,52 @@ function pontosDaPartida() {
   return chave ? pontos.filter((ponto) => ponto.partida === chave) : [];
 }
 
+function totalPontosDoTime(time, eventos = pontosDaPartida()) {
+  return eventos.filter((ponto) => idTimePonto(ponto) === time.id).length;
+}
+
+function partidaEncerrada() { return partidasEncerradas[chavePartida()]; }
+
+function atualizarEncerramentoDaPartida() {
+  const vencedor = [timePorId(partidaPontos.timeA), timePorId(partidaPontos.timeB)]
+    .find((time) => time && totalPontosDoTime(time) >= totalPontosPartida);
+  if (vencedor) partidasEncerradas[chavePartida()] = { timeId: vencedor.id };
+  else delete partidasEncerradas[chavePartida()];
+  salvarPartidasEncerradas();
+  return vencedor;
+}
+
+function abrirPopupVencedor() {
+  const encerramento = partidaEncerrada();
+  const vencedor = timePorId(encerramento?.timeId);
+  if (!vencedor) return;
+  const eventos = pontosDaPartida();
+  const pontuadores = resumoAtletasPontos(eventos).filter((atleta) => atleta.timeId === vencedor.id && atleta.total > 0);
+  const pontosContra = eventos.filter((ponto) => idTimePonto(ponto) === vencedor.id && ponto.modo === "contra").length;
+  const linhas = pontuadores.length
+    ? `<div class="tabela-resumo"><table><thead><tr><th>Atleta</th><th>Total</th><th>Saque</th><th>Bloqueio</th><th>Ataque</th></tr></thead><tbody>${pontuadores.map((atleta) => `<tr><th scope="row">${esc(atleta.nome)}</th><td>${atleta.total}</td><td>${atleta.Saque}</td><td>${atleta.Bloqueio}</td><td>${atleta.Ataque}</td></tr>`).join("")}</tbody></table></div>`
+    : '<p class="msg">Nenhum ponto direto registrado para este time.</p>';
+  $("conteudo-vencedor").innerHTML = `<h3 class="time-vencedor">${esc(vencedor.nome)} venceu!</h3><p class="msg">${totalPontosDoTime(vencedor, eventos)} de ${totalPontosPartida} pontos</p>${pontosContra ? `<p class="msg">Pontos por erro adversário: ${pontosContra}</p>` : ""}${linhas}<button id="btn-compartilhar-vencedor" class="primario">Compartilhar partida</button>`;
+  $("btn-compartilhar-vencedor").addEventListener("click", compartilharResumoPontos);
+  if (!$("popup-vencedor").open) $("popup-vencedor").showModal();
+}
+
+async function compartilharResumoPontos() {
+  const texto = mensagemResumoPontos();
+  try {
+    if (navigator.share) {
+      await navigator.share({ text: texto });
+      return;
+    }
+    await navigator.clipboard.writeText(texto);
+  } catch {
+    // O WhatsApp continua disponível quando o compartilhamento nativo falha.
+  }
+  window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, "_blank");
+}
+
 function iniciarRegistroPonto(timeId) {
+  if (partidaEncerrada()) return;
   registroPonto = { timeId, modo: "escolha", atletaId: "" };
   renderPontos();
 }
@@ -884,6 +936,7 @@ function idTimePonto(ponto) { return ponto.time_ponto_id || ponto.time_id; }
 function nomeTimePonto(ponto) { return ponto.time_ponto_nome || ponto.time_nome; }
 
 function registrarPonto(fundamento) {
+  if (partidaEncerrada()) return;
   const timePonto = timePorId(registroPonto?.timeId);
   const timeAtleta = registroPonto?.modo === "contra" ? outroTime(timePonto?.id) : timePonto;
   const atleta = timeAtleta?.jogadores.find((jogador) => jogador.id === registroPonto.atletaId);
@@ -896,13 +949,15 @@ function registrarPonto(fundamento) {
   });
   salvarPontos();
   registroPonto = null;
+  const vencedor = atualizarEncerramentoDaPartida();
   renderPontos();
+  if (vencedor) abrirPopupVencedor();
 }
 
 function resumoAtletasPontos(eventos) {
   const atletas = new Map();
   eventos.forEach((ponto) => {
-    if (!atletas.has(ponto.atleta_id)) atletas.set(ponto.atleta_id, { nome: ponto.atleta_nome, time: ponto.time_nome, total: 0, erros: 0, Saque: 0, Bloqueio: 0, Ataque: 0 });
+    if (!atletas.has(ponto.atleta_id)) atletas.set(ponto.atleta_id, { nome: ponto.atleta_nome, time: ponto.time_nome, timeId: ponto.time_id, total: 0, erros: 0, Saque: 0, Bloqueio: 0, Ataque: 0 });
     const resumo = atletas.get(ponto.atleta_id);
     if (ponto.modo === "contra") resumo.erros += 1;
     else {
@@ -917,7 +972,7 @@ function mensagemResumoPontos() {
   const timeA = timePorId(partidaPontos.timeA);
   const timeB = timePorId(partidaPontos.timeB);
   const eventos = pontosDaPartida();
-  const total = (time) => eventos.filter((ponto) => idTimePonto(ponto) === time.id).length;
+  const total = (time) => totalPontosDoTime(time, eventos);
   const atletas = resumoAtletasPontos(eventos).map((atleta) => `${atleta.nome}: ${atleta.total} ponto${atleta.total === 1 ? "" : "s"} (${atleta.Saque} saque${atleta.Saque === 1 ? "" : "s"}, ${atleta.Bloqueio} bloqueio${atleta.Bloqueio === 1 ? "" : "s"}, ${atleta.Ataque} ataque${atleta.Ataque === 1 ? "" : "s"})${atleta.erros ? `, ${atleta.erros} erro${atleta.erros === 1 ? "" : "s"}` : ""}`);
   return ["*Resumo da partida - Vôlei Djalmer*", "", `${timeA.nome}: ${total(timeA)} pontos`, `${timeB.nome}: ${total(timeB)} pontos`, "", "*Pontuação por atleta*", ...atletas].join("\n");
 }
@@ -957,14 +1012,15 @@ function renderPontos() {
   seletorB.value = partidaPontos.timeB;
   const timeA = timePorId(partidaPontos.timeA);
   const timeB = timePorId(partidaPontos.timeB);
-  botaoA.disabled = false;
-  botaoB.disabled = false;
+  const encerrada = partidaEncerrada();
+  botaoA.disabled = Boolean(encerrada);
+  botaoB.disabled = Boolean(encerrada);
   botaoReiniciar.disabled = false;
   botaoNova.disabled = false;
   botaoDesfazer.disabled = !pontosDaPartida().length;
   botaoA.textContent = "Ponto";
   botaoB.textContent = "Ponto";
-  mensagem.textContent = "Clique no time que pontuou, selecione o atleta e depois o fundamento.";
+  mensagem.textContent = encerrada ? `Partida encerrada: ${timePorId(encerrada.timeId)?.nome || "time vencedor"}.` : "Clique no time que pontuou, selecione o atleta e depois o fundamento.";
 
   if (registroPonto) {
     const time = timePorId(registroPonto.timeId);
@@ -998,23 +1054,11 @@ function renderPontos() {
   }
 
   const eventos = pontosDaPartida();
-  const total = (time) => eventos.filter((ponto) => idTimePonto(ponto) === time.id).length;
+  const total = (time) => totalPontosDoTime(time, eventos);
   const linhas = resumoAtletasPontos(eventos).map((atleta) => `<tr><th scope="row">${esc(atleta.nome)}<small>${esc(atleta.time)}</small></th><td>${atleta.total}</td><td>${atleta.Saque}</td><td>${atleta.Bloqueio}</td><td>${atleta.Ataque}</td><td>${atleta.erros}</td></tr>`).join("");
   const lances = [...eventos].reverse().map((ponto) => `<li><strong>${esc(nomeTimePonto(ponto))}</strong>: ${ponto.modo === "contra" ? `erro de ${esc(ponto.atleta_nome)}` : `${esc(ponto.atleta_nome)} - ${esc(ponto.fundamento)}`}</li>`).join("");
   historico.innerHTML = `<div class="card historico-pontos"><div class="cabecalho-cadastro"><h2>Histórico da partida</h2><button id="btn-compartilhar-pontos" class="secundario" ${eventos.length ? "" : "disabled"}>Compartilhar resumo</button></div><p class="msg">Meta: ${totalPontosPartida} pontos</p><div class="placar-pontos"><strong>${esc(timeA.nome)} <span>${total(timeA)}</span></strong><strong>${esc(timeB.nome)} <span>${total(timeB)}</span></strong></div>${eventos.length ? `<div class="tabela-resumo"><table><thead><tr><th>Atleta</th><th>Total</th><th>Saque</th><th>Bloqueio</th><th>Ataque</th><th>Erros</th></tr></thead><tbody>${linhas}</tbody></table></div><ul class="lances-pontos">${lances}</ul>` : '<p class="msg">Nenhum ponto registrado nesta partida.</p>'}</div>`;
-  $("btn-compartilhar-pontos")?.addEventListener("click", async () => {
-    const texto = mensagemResumoPontos();
-    try {
-      if (navigator.share) {
-        await navigator.share({ text: texto });
-        return;
-      }
-      await navigator.clipboard.writeText(texto);
-    } catch {
-      // O WhatsApp continua disponível quando o compartilhamento nativo falha.
-    }
-    window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, "_blank");
-  });
+  $("btn-compartilhar-pontos")?.addEventListener("click", compartilharResumoPontos);
 }
 
 $("pontos-time-a").addEventListener("change", () => {
@@ -1042,7 +1086,9 @@ $("btn-nova-partida").addEventListener("click", () => {
   salvarPontos();
   const primeiroTime = times[0]?.id || "";
   partidaPontos = { timeA: primeiroTime, timeB: times.find((time) => time.id !== primeiroTime)?.id || "" };
+  partidasEncerradas = {};
   salvarPartidaPontos();
+  salvarPartidasEncerradas();
   registroPonto = null;
   renderPontos();
 });
@@ -1053,8 +1099,14 @@ $("btn-desfazer-ponto").addEventListener("click", () => {
   const ultimo = eventos[eventos.length - 1];
   pontos = pontos.filter((ponto) => ponto.id !== ultimo.id);
   salvarPontos();
+  if (partidaEncerrada()) {
+    delete partidasEncerradas[chavePartida()];
+    salvarPartidasEncerradas();
+  }
   renderPontos();
 });
+
+$("btn-fechar-vencedor").addEventListener("click", () => $("popup-vencedor").close());
 
 $("btn-configurar-pontos").addEventListener("click", () => {
   $("total-pontos-partida").value = totalPontosPartida;
@@ -1067,7 +1119,9 @@ $("btn-salvar-config-pontos").addEventListener("click", () => {
   totalPontosPartida = valor;
   localStorage.setItem(STORAGE_TOTAL_PONTOS, String(valor));
   $("popup-config-pontos").close();
+  const vencedor = atualizarEncerramentoDaPartida();
   renderPontos();
+  if (vencedor) abrirPopupVencedor();
 });
 
 $("btn-ponto-time-a").addEventListener("click", () => iniciarRegistroPonto(partidaPontos.timeA));

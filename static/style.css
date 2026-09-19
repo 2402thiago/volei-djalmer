@@ -164,6 +164,8 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .historico-pontos small { display: block; color: var(--texto-suave); font-weight: 400; }
 .lances-pontos { list-style: none; margin-top: 12px; }
 .lances-pontos li { padding: 8px 0; border-top: 1px solid var(--borda); font-size: 13px; }
+.time-vencedor { color: var(--acento); font-size: 20px; margin-bottom: 4px; }
+#btn-compartilhar-vencedor { width: 100%; margin-top: 14px; }
 .cadastro-linha { flex-wrap: wrap; }
 .cadastro-linha input { flex: 1; min-width: 150px; }
 .cadastro-linha select { min-width: 90px; }
