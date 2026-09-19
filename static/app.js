@@ -973,8 +973,34 @@ function mensagemResumoPontos() {
   const timeB = timePorId(partidaPontos.timeB);
   const eventos = pontosDaPartida();
   const total = (time) => totalPontosDoTime(time, eventos);
-  const atletas = resumoAtletasPontos(eventos).map((atleta) => `${atleta.nome}: ${atleta.total} ponto${atleta.total === 1 ? "" : "s"} (${atleta.Saque} saque${atleta.Saque === 1 ? "" : "s"}, ${atleta.Bloqueio} bloqueio${atleta.Bloqueio === 1 ? "" : "s"}, ${atleta.Ataque} ataque${atleta.Ataque === 1 ? "" : "s"})${atleta.erros ? `, ${atleta.erros} erro${atleta.erros === 1 ? "" : "s"}` : ""}`);
-  return ["*Resumo da partida - Vôlei Djalmer*", "", `${timeA.nome}: ${total(timeA)} pontos`, `${timeB.nome}: ${total(timeB)} pontos`, "", "*Pontuação por atleta*", ...atletas].join("\n");
+  const atletas = resumoAtletasPontos(eventos);
+  const secaoTime = (time) => {
+    const atletasDoTime = atletas.filter((atleta) => atleta.timeId === time.id && (atleta.total || atleta.erros));
+    const pontosContra = eventos.filter((ponto) => idTimePonto(ponto) === time.id && ponto.modo === "contra").length;
+    return [
+      `*${time.nome} - ${total(time)} pontos*`,
+      ...(atletasDoTime.length ? atletasDoTime.map((atleta) => `${atleta.nome}: ${atleta.total} ponto${atleta.total === 1 ? "" : "s"} (${atleta.Ataque} ataque${atleta.Ataque === 1 ? "" : "s"}, ${atleta.Bloqueio} bloqueio${atleta.Bloqueio === 1 ? "" : "s"}, ${atleta.Saque} saque${atleta.Saque === 1 ? "" : "s"})${atleta.erros ? ` | ${atleta.erros} erro${atleta.erros === 1 ? "" : "s"}` : ""}`) : ["Nenhum registro individual."]),
+      ...(pontosContra ? [`Pontos por erro adversário: ${pontosContra}`] : []),
+    ].join("\n");
+  };
+  const destaque = (campo, titulo, unidade) => {
+    const maior = Math.max(...atletas.map((atleta) => atleta[campo]), 0);
+    if (!maior) return `${titulo}: sem registro`;
+    const nomes = atletas.filter((atleta) => atleta[campo] === maior).map((atleta) => atleta.nome).join(" e ");
+    return `${titulo}: ${nomes} - ${maior} ${unidade}${maior === 1 ? "" : "s"}`;
+  };
+  return [
+    "*Resumo da partida - Vôlei Djalmer*",
+    "",
+    secaoTime(timeA),
+    "",
+    secaoTime(timeB),
+    "",
+    "*Destaques da partida*",
+    destaque("Ataque", "Melhor Atacante", "ataque"),
+    destaque("Bloqueio", "Melhor Bloqueador", "bloqueio"),
+    destaque("Saque", "Melhor Saque", "saque"),
+  ].join("\n");
 }
 
 function renderPontos() {
