@@ -14,7 +14,7 @@ from .runtime import runtime
 from .services import ErroDeDominio
 from .sheets_nivelamento import SheetsNivelamento
 from .google_auth import callback as oauth_callback, login as oauth_login, setting as oauth_setting, user as oauth_user
-from .organizacao import ConfigError, DomainError, organization
+from .organizacao import EVENTS, PAYMENT_PROOFS, ConfigError, DomainError, organization
 
 BASE = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE / "static"
@@ -192,6 +192,8 @@ def _organization(fn):
         raise HTTPException(status_code=503, detail=str(exc))
     except (DomainError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    except KeyError as exc:
+        raise HTTPException(status_code=503, detail="A estrutura das abas da Organização é inválida. Atualize os cabeçalhos ou crie as abas Organizacao.") from exc
 
 
 @app.get("/auth/login")
@@ -288,8 +290,8 @@ def approve_proof(proof_id: str, request: Request):
 @app.get("/api/organizacao/proofs/{proof_id}/download")
 def download_proof(proof_id: str, request: Request):
     def action():
-        proof = next((p for p in organization.store.rows("PaymentProofs") if p["id"] == proof_id), None)
-        event = proof and next((e for e in organization.store.rows("Event") if e["id"] == proof["event_id"]), None)
+        proof = next((p for p in organization.store.rows(PAYMENT_PROOFS) if p["id"] == proof_id), None)
+        event = proof and next((e for e in organization.store.rows(EVENTS) if e["id"] == proof["event_id"]), None)
         if not proof or not event or not organization.commission(event, oauth_user(request)["email"]): raise DomainError("Apenas a comissão pode baixar comprovantes.")
         return Response(organization.store.download(proof["drive_file_id"]), media_type=proof["mime_type"], headers={"Content-Disposition": f'attachment; filename="{proof["nome_arquivo"]}"'})
     return _organization(action)

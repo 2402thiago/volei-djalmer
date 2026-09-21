@@ -75,7 +75,7 @@ O **ID da planilha** é a parte da URL entre `/d/` e `/edit`: para
 
 ## Organização de eventos
 
-A aba **Organização** cria eventos persistidos na mesma planilha. O backend cria, sem apagar nenhuma aba existente, as abas `Event`, `Registrations`, `Guests`, `Commissions` e `PaymentProofs`. A aba existente `Acessos` continua sendo a lista global de criadores autorizados (`email`, `ativo`, com `sim`).
+A aba **Organização** cria eventos persistidos na mesma planilha. O backend cria, sem apagar nenhuma aba existente, as abas `OrganizacaoEventos`, `OrganizacaoInscricoes`, `OrganizacaoConvidados`, `OrganizacaoComissoes` e `OrganizacaoComprovantes`. A aba existente `Acessos` continua sendo a lista global de criadores autorizados (`email`, `ativo`, com `sim`).
 
 Configure a conta de serviço somente no servidor com `GOOGLE_SHEETS_ID` e `GOOGLE_SERVICE_ACCOUNT_JSON` (ou `GOOGLE_SERVICE_ACCOUNT_INFO`), e compartilhe também a pasta privada de comprovantes com ela em `GOOGLE_DRIVE_FOLDER_ID`. Habilite as APIs Google Sheets e Google Drive. Os comprovantes ficam privados: não é criado link compartilhado no Drive.
 

@@ -11,12 +11,17 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 
+EVENTS = "OrganizacaoEventos"
+REGISTRATIONS = "OrganizacaoInscricoes"
+GUESTS = "OrganizacaoConvidados"
+COMMISSIONS = "OrganizacaoComissoes"
+PAYMENT_PROOFS = "OrganizacaoComprovantes"
 SHEETS = {
-    "Event": ["id", "slug", "titulo", "data", "hora_inicio", "hora_fim", "capacidade", "vagas_liberadas", "maps_url", "valor", "pix", "criador_email", "criado_em"],
-    "Registrations": ["id", "event_id", "google_sub", "nome", "lista", "pagamento", "criado_em"],
-    "Guests": ["id", "event_id", "registration_id", "nome", "status", "criado_em"],
-    "Commissions": ["id", "event_id", "email"],
-    "PaymentProofs": ["id", "event_id", "tipo", "subject_id", "drive_file_id", "nome_arquivo", "mime_type", "tamanho", "status", "enviado_por", "enviado_em", "aprovado_por"],
+    EVENTS: ["id", "slug", "titulo", "data", "hora_inicio", "hora_fim", "capacidade", "vagas_liberadas", "maps_url", "valor", "pix", "criador_email", "criado_em"],
+    REGISTRATIONS: ["id", "event_id", "google_sub", "nome", "lista", "pagamento", "criado_em"],
+    GUESTS: ["id", "event_id", "registration_id", "nome", "status", "criado_em"],
+    COMMISSIONS: ["id", "event_id", "email"],
+    PAYMENT_PROOFS: ["id", "event_id", "tipo", "subject_id", "drive_file_id", "nome_arquivo", "mime_type", "tamanho", "status", "enviado_por", "enviado_em", "aprovado_por"],
 }
 EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 ALLOWED_FILES = {"image/jpeg", "image/png", "application/pdf"}
@@ -91,6 +96,8 @@ class GoogleOrganizationStore:
             ws = book.add_worksheet(title=name, rows=1000, cols=len(SHEETS[name]))
         if not ws.get_all_values():
             ws.append_row(SHEETS[name], value_input_option="RAW")
+        elif ws.get_all_values()[0] != SHEETS[name]:
+            raise ConfigError(f"A aba {name} não possui a estrutura esperada. Crie uma nova aba com esse nome ou ajuste os cabeçalhos.")
         return ws
 
     def prepare(self):
@@ -175,22 +182,22 @@ class OrganizationService:
             valid_maps = parsed.scheme == "https" and (host in {"maps.google.com", "maps.app.goo.gl"} or (host in {"google.com", "www.google.com"} and parsed.path.startswith("/maps")))
             if not valid_maps: raise DomainError("Informe um link válido do Google Maps.")
         base = slugify(data["titulo"] + "-" + data["data"])
-        used = {e["slug"] for e in self.store.rows("Event")}; slug = base
+        used = {e["slug"] for e in self.store.rows(EVENTS)}; slug = base
         while slug in used: slug = f"{base}-{uuid.uuid4().hex[:5]}"
         event = {"id": uuid.uuid4().hex, "slug": slug, "titulo": data["titulo"].strip(), "data": data["data"], "hora_inicio": data["hora_inicio"], "hora_fim": data["hora_fim"], "capacidade": capacity, "vagas_liberadas": released, "maps_url": maps_url, "valor": data.get("valor", ""), "pix": data.get("pix", "").strip(), "criador_email": actor["email"], "criado_em": now()}
-        self.store.add("Event", event)
+        self.store.add(EVENTS, event)
         emails = {actor["email"].casefold()} | {x.strip().casefold() for x in str(data.get("emails_comissao", "")).split(",") if EMAIL.fullmatch(x.strip())}
-        for email in emails: self.store.add("Commissions", {"id": uuid.uuid4().hex, "event_id": event["id"], "email": email})
+        for email in emails: self.store.add(COMMISSIONS, {"id": uuid.uuid4().hex, "event_id": event["id"], "email": email})
         return event
     def event(self, slug):
-        return next((e for e in self.store.rows("Event") if e["slug"] == slug), None)
+        return next((e for e in self.store.rows(EVENTS) if e["slug"] == slug), None)
     def open_events(self, actor):
         today = date.today().isoformat()
         email = actor["email"].casefold()
-        commissions = {c["event_id"] for c in self.store.rows("Commissions") if c["email"].casefold() == email}
-        registrations = self.store.rows("Registrations")
+        commissions = {c["event_id"] for c in self.store.rows(COMMISSIONS) if c["email"].casefold() == email}
+        registrations = self.store.rows(REGISTRATIONS)
         events = []
-        for event in self.store.rows("Event"):
+        for event in self.store.rows(EVENTS):
             if event["data"] < today or (event["criador_email"].casefold() != email and event["id"] not in commissions):
                 continue
             event_registrations = [r for r in registrations if r["event_id"] == event["id"]]
@@ -205,34 +212,34 @@ class OrganizationService:
     def public_event(self, slug):
         event = self.event(slug)
         if not event: raise DomainError("Evento não encontrado.")
-        registrations = self.store.rows("Registrations")
-        guests = self.store.rows("Guests")
+        registrations = self.store.rows(REGISTRATIONS)
+        guests = self.store.rows(GUESTS)
         return {"event": {k: v for k, v in event.items() if k != "criador_email"}, "registrations": [{"nome": r["nome"], "lista": r["lista"], "pagamento": r["pagamento"]} for r in registrations if r["event_id"] == event["id"]], "guests": [{"nome": g["nome"], "status": g["status"]} for g in guests if g["event_id"] == event["id"]]}
     def join(self, slug, actor):
         event = self.event(slug)
         if not event: raise DomainError("Evento não encontrado.")
-        rows = self.store.rows("Registrations")
+        rows = self.store.rows(REGISTRATIONS)
         if any(r["event_id"] == event["id"] and r["google_sub"] == actor["sub"] for r in rows): raise DomainError("Você já entrou nesta lista.")
         main = sum(r["event_id"] == event["id"] and r["lista"] == "principal" for r in rows)
         limit = min(int(event["capacidade"]), int(event["vagas_liberadas"]))
         row = {"id": uuid.uuid4().hex, "event_id": event["id"], "google_sub": actor["sub"], "nome": actor["name"], "lista": "principal" if main < limit else "reserva", "pagamento": "pendente", "criado_em": now()}
-        self.store.add("Registrations", row); return row
+        self.store.add(REGISTRATIONS, row); return row
     def registration_for(self, event, actor):
-        return next((r for r in self.store.rows("Registrations") if r["event_id"] == event["id"] and r["google_sub"] == actor["sub"]), None)
+        return next((r for r in self.store.rows(REGISTRATIONS) if r["event_id"] == event["id"] and r["google_sub"] == actor["sub"]), None)
     def add_guest(self, slug, name, actor):
         event = self.event(slug); reg = event and self.registration_for(event, actor)
         if not reg: raise DomainError("Entre na lista antes de adicionar convidado.")
         if not name.strip(): raise DomainError("Informe o nome do convidado.")
         row = {"id": uuid.uuid4().hex, "event_id": event["id"], "registration_id": reg["id"], "nome": name.strip(), "status": "pendente", "criado_em": now()}
-        self.store.add("Guests", row); return row
+        self.store.add(GUESTS, row); return row
     def mine(self, slug, actor):
         event = self.event(slug)
         if not event: raise DomainError("Evento não encontrado.")
         registration = self.registration_for(event, actor)
         if not registration: return {"registration": None, "guests": []}
-        return {"registration": registration, "guests": [g for g in self.store.rows("Guests") if g["registration_id"] == registration["id"]]}
+        return {"registration": registration, "guests": [g for g in self.store.rows(GUESTS) if g["registration_id"] == registration["id"]]}
     def commission(self, event, email):
-        return any(c["event_id"] == event["id"] and c["email"].casefold() == email.casefold() for c in self.store.rows("Commissions"))
+        return any(c["event_id"] == event["id"] and c["email"].casefold() == email.casefold() for c in self.store.rows(COMMISSIONS))
     def upload_proof(self, slug, kind, subject_id, actor, filename, mime, data):
         filename = valid_file(filename, mime, data)
         event = self.event(slug)
@@ -242,14 +249,14 @@ class OrganizationService:
             if not registration or registration["id"] != subject_id: raise DomainError("Você só pode enviar seu próprio comprovante.")
         elif kind == "guest":
             if not self.commission(event, actor["email"]): raise DomainError("Apenas a comissão pode enviar comprovante de convidado.")
-            guest = next((g for g in self.store.rows("Guests") if g["id"] == subject_id and g["event_id"] == event["id"]), None)
+            guest = next((g for g in self.store.rows(GUESTS) if g["id"] == subject_id and g["event_id"] == event["id"]), None)
             if not guest or guest["status"] != "pendente":
                 raise DomainError("Convidado não encontrado neste evento.")
         else: raise DomainError("Tipo de comprovante inválido.")
-        if any(p["event_id"] == event["id"] and p["tipo"] == kind and p["subject_id"] == subject_id for p in self.store.rows("PaymentProofs")):
+        if any(p["event_id"] == event["id"] and p["tipo"] == kind and p["subject_id"] == subject_id for p in self.store.rows(PAYMENT_PROOFS)):
             raise DomainError("Já existe um comprovante enviado para esta inscrição.")
         proof = {"id": uuid.uuid4().hex, "event_id": event["id"], "tipo": kind, "subject_id": subject_id, "drive_file_id": self.store.upload(filename, mime, data), "nome_arquivo": filename, "mime_type": mime, "tamanho": len(data), "status": "pendente", "enviado_por": actor["email"], "enviado_em": now(), "aprovado_por": ""}
-        self.store.add("PaymentProofs", proof); return proof
+        self.store.add(PAYMENT_PROOFS, proof); return proof
     def proofs(self, slug, actor):
         event = self.event(slug)
         if not event or not self.commission(event, actor["email"]): raise DomainError("Apenas a comissão pode ver comprovantes.")
@@ -257,27 +264,27 @@ class OrganizationService:
     def commission_details(self, slug, actor):
         event = self.event(slug)
         if not event or not self.commission(event, actor["email"]): raise DomainError("Apenas a comissão pode ver os detalhes do evento.")
-        registrations = [r for r in self.store.rows("Registrations") if r["event_id"] == event["id"]]
-        guests = [g for g in self.store.rows("Guests") if g["event_id"] == event["id"]]
+        registrations = [r for r in self.store.rows(REGISTRATIONS) if r["event_id"] == event["id"]]
+        guests = [g for g in self.store.rows(GUESTS) if g["event_id"] == event["id"]]
         names = {r["id"]: r["nome"] for r in registrations} | {g["id"]: g["nome"] for g in guests}
-        proofs = [{**p, "subject_name": names.get(p["subject_id"], "Participante removido")} for p in self.store.rows("PaymentProofs") if p["event_id"] == event["id"]]
+        proofs = [{**p, "subject_name": names.get(p["subject_id"], "Participante removido")} for p in self.store.rows(PAYMENT_PROOFS) if p["event_id"] == event["id"]]
         return {"event": event, "guests": guests, "proofs": proofs}
     def approve(self, proof_id, actor):
-        proof = next((p for p in self.store.rows("PaymentProofs") if p["id"] == proof_id), None)
-        event = proof and next((e for e in self.store.rows("Event") if e["id"] == proof["event_id"]), None)
+        proof = next((p for p in self.store.rows(PAYMENT_PROOFS) if p["id"] == proof_id), None)
+        event = proof and next((e for e in self.store.rows(EVENTS) if e["id"] == proof["event_id"]), None)
         if not proof or not event or not self.commission(event, actor["email"]): raise DomainError("Sem permissão para aprovar este comprovante.")
         if proof["status"] == "aprovado": raise DomainError("Este comprovante já foi aprovado.")
-        self.store.update("PaymentProofs", proof_id, {"status": "aprovado", "aprovado_por": actor["email"]})
-        if proof["tipo"] == "registration": self.store.update("Registrations", proof["subject_id"], {"pagamento": "confirmado"})
+        self.store.update(PAYMENT_PROOFS, proof_id, {"status": "aprovado", "aprovado_por": actor["email"]})
+        if proof["tipo"] == "registration": self.store.update(REGISTRATIONS, proof["subject_id"], {"pagamento": "confirmado"})
         else:
-            guests = self.store.rows("Guests"); guest = next((g for g in guests if g["id"] == proof["subject_id"] and g["event_id"] == event["id"]), None)
+            guests = self.store.rows(GUESTS); guest = next((g for g in guests if g["id"] == proof["subject_id"] and g["event_id"] == event["id"]), None)
             if not guest: raise DomainError("Convidado não encontrado neste evento.")
             if guest["status"] != "pendente": raise DomainError("Este convidado já foi confirmado.")
-            regs = self.store.rows("Registrations"); main = sum(r["event_id"] == event["id"] and r["lista"] == "principal" for r in regs)
+            regs = self.store.rows(REGISTRATIONS); main = sum(r["event_id"] == event["id"] and r["lista"] == "principal" for r in regs)
             if main < min(int(event["capacidade"]), int(event["vagas_liberadas"])):
-                self.store.add("Registrations", {"id": uuid.uuid4().hex, "event_id": event["id"], "google_sub": "guest:" + guest["id"], "nome": guest["nome"], "lista": "principal", "pagamento": "confirmado", "criado_em": now()})
-                self.store.update("Guests", guest["id"], {"status": "promovido"})
-            else: self.store.update("Guests", guest["id"], {"status": "confirmado"})
+                self.store.add(REGISTRATIONS, {"id": uuid.uuid4().hex, "event_id": event["id"], "google_sub": "guest:" + guest["id"], "nome": guest["nome"], "lista": "principal", "pagamento": "confirmado", "criado_em": now()})
+                self.store.update(GUESTS, guest["id"], {"status": "promovido"})
+            else: self.store.update(GUESTS, guest["id"], {"status": "confirmado"})
         return {"ok": True}
 
 

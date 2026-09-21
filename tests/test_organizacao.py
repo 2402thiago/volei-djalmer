@@ -1,8 +1,8 @@
-from app.organizacao import OrganizationService
+from app.organizacao import EVENTS, GUESTS, REGISTRATIONS, SHEETS, OrganizationService
 
 
 class FakeStore:
-    def __init__(self): self.data = {name: [] for name in ("Event", "Registrations", "Guests", "Commissions", "PaymentProofs")}
+    def __init__(self): self.data = {name: [] for name in SHEETS}
     def prepare(self): pass
     def rows(self, name): return [dict(r) for r in self.data[name]]
     def add(self, name, row): self.data[name].append(dict(row))
@@ -38,14 +38,14 @@ def test_guest_only_promotes_when_released_slot_is_available():
     guest = service.add_guest(created["slug"], "Convidada", PLAYER) if service.join(created["slug"], PLAYER) else None
     proof = service.upload_proof(created["slug"], "guest", guest["id"], ORGANIZER, "x.pdf", "application/pdf", b"%PDF-1.7")
     service.approve(proof["id"], ORGANIZER)
-    assert service.store.rows("Guests")[0]["status"] == "confirmado"
+    assert service.store.rows(GUESTS)[0]["status"] == "confirmado"
 
 
 def test_participant_proof_is_private_and_confirmed_after_approval():
     service = Service(FakeStore()); created = event(service); registration = service.join(created["slug"], PLAYER)
     proof = service.upload_proof(created["slug"], "registration", registration["id"], PLAYER, "x.png", "image/png", b"\x89PNG\r\n\x1a\nbody")
     service.approve(proof["id"], ORGANIZER)
-    assert service.store.rows("Registrations")[0]["pagamento"] == "confirmado"
+    assert service.store.rows(REGISTRATIONS)[0]["pagamento"] == "confirmado"
 
 
 def test_public_data_includes_pix_guests_and_commission_proof_name():
@@ -85,5 +85,10 @@ def test_rejects_duplicate_proof_for_the_same_guest():
 def test_open_events_only_returns_future_events_for_creator_or_commission():
     service = Service(FakeStore())
     future = event(service)
-    service.store.add("Event", {"id": "old", "slug": "old", "titulo": "Antigo", "data": "2000-01-01", "hora_inicio": "19:00", "hora_fim": "21:00", "capacidade": 24, "vagas_liberadas": 24, "maps_url": "", "valor": "", "pix": "", "criador_email": ORGANIZER["email"], "criado_em": ""})
+    service.store.add(EVENTS, {"id": "old", "slug": "old", "titulo": "Antigo", "data": "2000-01-01", "hora_inicio": "19:00", "hora_fim": "21:00", "capacidade": 24, "vagas_liberadas": 24, "maps_url": "", "valor": "", "pix": "", "criador_email": ORGANIZER["email"], "criado_em": ""})
     assert [item["slug"] for item in service.open_events(ORGANIZER)] == [future["slug"]]
+
+
+def test_organization_uses_namespaced_sheets_to_avoid_existing_tab_names():
+    assert EVENTS == "OrganizacaoEventos"
+    assert "Event" not in SHEETS
