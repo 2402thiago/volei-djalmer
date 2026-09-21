@@ -54,12 +54,13 @@ body {
 }
 .aba {
   flex: 1;
-  padding: 14px 0;
+  padding: 13px 2px;
   border: none;
   background: none;
-  font-size: 13px;
+  font-size: clamp(11px, 2.5vw, 13px);
   color: var(--texto-suave);
   cursor: pointer;
+  white-space: nowrap;
 }
 .aba.ativa { color: var(--acento); font-weight: 600; }
 
