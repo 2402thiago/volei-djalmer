@@ -1,0 +1,82 @@
+from app.organizacao import OrganizationService
+
+
+class FakeStore:
+    def __init__(self): self.data = {name: [] for name in ("Event", "Registrations", "Guests", "Commissions", "PaymentProofs")}
+    def prepare(self): pass
+    def rows(self, name): return [dict(r) for r in self.data[name]]
+    def add(self, name, row): self.data[name].append(dict(row))
+    def update(self, name, row_id, changes):
+        next(r for r in self.data[name] if r["id"] == row_id).update(changes)
+    def upload(self, filename, mime, data): return "drive-1"
+
+
+class Service(OrganizationService):
+    def organizer_allowed(self, email): return email == "organizador@example.com"
+
+
+ORGANIZER = {"sub": "1", "name": "Organizador", "email": "organizador@example.com"}
+PLAYER = {"sub": "2", "name": "Ana", "email": "ana@example.com"}
+
+
+def event(service, released=1):
+    return service.create_event({"titulo": "Jogo", "data": "2026-10-01", "hora_inicio": "19:00", "hora_fim": "21:00", "capacidade": 2, "vagas_liberadas": released}, ORGANIZER)
+
+
+def test_join_once_and_reserve_after_released_slots():
+    service = Service(FakeStore()); created = event(service)
+    assert service.join(created["slug"], PLAYER)["lista"] == "principal"
+    try:
+        service.join(created["slug"], PLAYER)
+        assert False, "duplicate identity must be rejected"
+    except ValueError: pass
+    assert service.join(created["slug"], {"sub": "3", "name": "Bia", "email": "bia@example.com"})["lista"] == "reserva"
+
+
+def test_guest_only_promotes_when_released_slot_is_available():
+    service = Service(FakeStore()); created = event(service, released=1)
+    guest = service.add_guest(created["slug"], "Convidada", PLAYER) if service.join(created["slug"], PLAYER) else None
+    proof = service.upload_proof(created["slug"], "guest", guest["id"], ORGANIZER, "x.pdf", "application/pdf", b"%PDF-1.7")
+    service.approve(proof["id"], ORGANIZER)
+    assert service.store.rows("Guests")[0]["status"] == "confirmado"
+
+
+def test_participant_proof_is_private_and_confirmed_after_approval():
+    service = Service(FakeStore()); created = event(service); registration = service.join(created["slug"], PLAYER)
+    proof = service.upload_proof(created["slug"], "registration", registration["id"], PLAYER, "x.png", "image/png", b"\x89PNG\r\n\x1a\nbody")
+    service.approve(proof["id"], ORGANIZER)
+    assert service.store.rows("Registrations")[0]["pagamento"] == "confirmado"
+
+
+def test_public_data_includes_pix_guests_and_commission_proof_name():
+    service = Service(FakeStore()); created = event(service)
+    registration = service.join(created["slug"], PLAYER)
+    guest = service.add_guest(created["slug"], "Convidada", PLAYER)
+    proof = service.upload_proof(created["slug"], "guest", guest["id"], ORGANIZER, "guest.pdf", "application/pdf", b"%PDF-1.7")
+    public = service.public_event(created["slug"])
+    assert public["event"]["pix"] == ""
+    assert public["guests"] == [{"nome": "Convidada", "status": "pendente"}]
+    details = service.commission_details(created["slug"], ORGANIZER)
+    assert details["proofs"][0]["subject_name"] == "Convidada"
+    assert registration["nome"] == "Ana"
+
+
+def test_rejects_file_with_spoofed_mime_type():
+    service = Service(FakeStore()); created = event(service); registration = service.join(created["slug"], PLAYER)
+    try:
+        service.upload_proof(created["slug"], "registration", registration["id"], PLAYER, "bad.png", "image/png", b"not-a-png")
+        assert False, "invalid file signature must be rejected"
+    except ValueError:
+        pass
+
+
+def test_rejects_duplicate_proof_for_the_same_guest():
+    service = Service(FakeStore()); created = event(service)
+    service.join(created["slug"], PLAYER)
+    guest = service.add_guest(created["slug"], "Convidada", PLAYER)
+    service.upload_proof(created["slug"], "guest", guest["id"], ORGANIZER, "guest.pdf", "application/pdf", b"%PDF-1.7")
+    try:
+        service.upload_proof(created["slug"], "guest", guest["id"], ORGANIZER, "guest-2.pdf", "application/pdf", b"%PDF-1.7")
+        assert False, "duplicate proof must be rejected"
+    except ValueError:
+        pass

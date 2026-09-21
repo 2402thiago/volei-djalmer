@@ -69,3 +69,11 @@ def test_servir_index(client):
     r = client.get("/")
     assert r.status_code == 200
     assert "Vôlei Djalmer" in r.text
+
+
+def test_servir_rota_publica_da_lista(client):
+    r = client.get("/lista/qualquer-evento")
+    assert r.status_code == 200
+    assert 'id="pagina-lista"' in r.text
+    assert 'src="/organizacao.js"' in r.text
+    assert 'src="app.js"' not in r.text

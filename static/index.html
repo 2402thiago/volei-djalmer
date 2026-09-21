@@ -72,6 +72,7 @@
     <button data-tela="pontos" class="aba">Pontos</button>
     <button data-tela="presenca" class="aba">Presença</button>
     <button data-tela="cadastro" class="aba">Cadastro</button>
+    <button data-tela="organizacao" class="aba">Organização</button>
   </nav>
 
   <main>
@@ -232,8 +233,33 @@
       </div>
     </section>
 
+    <section id="organizacao" class="tela">
+      <div class="card acao">
+        <div class="linha linha-acoes"><button id="btn-login-organizacao" class="primario">Entrar com Google</button><span id="org-usuario" class="msg"></span></div>
+        <p id="msg-organizacao" class="msg">A criação exige e-mail autorizado na aba Acessos.</p>
+      </div>
+      <form id="form-evento" class="card acao formulario-organizacao">
+        <h2>Criar evento</h2>
+        <input name="titulo" placeholder="Nome do evento" maxlength="100" required />
+        <input name="data" type="date" required />
+        <div class="linha"><input name="hora_inicio" type="time" required /><input name="hora_fim" type="time" required /></div>
+        <div class="linha"><input name="capacidade" type="number" min="1" value="24" required /><input name="vagas_liberadas" type="number" min="0" value="24" required /></div>
+        <input name="maps_url" type="url" placeholder="Link do Google Maps" />
+        <div class="linha"><input name="valor" type="number" min="0" step="0.01" placeholder="Valor (R$)" /><input name="pix" placeholder="Chave PIX" /></div>
+        <input name="emails_comissao" type="text" placeholder="E-mails da comissão, separados por vírgula" />
+        <button class="primario">Criar e obter lista pública</button>
+      </form>
+      <div class="card acao formulario-organizacao">
+        <h2>Comissão: comprovantes</h2>
+        <input id="comissao-slug" placeholder="Slug do evento" />
+        <button id="btn-carregar-comprovantes" class="secundario">Carregar comprovantes privados</button>
+        <div id="lista-comprovantes"></div>
+      </div>
+    </section>
+
   </main>
 
   <script src="app.js"></script>
+  <script src="organizacao.js"></script>
 </body>
 </html>

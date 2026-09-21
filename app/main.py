@@ -3,18 +3,25 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+import os
+
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, Response
+from starlette.middleware.sessions import SessionMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .runtime import runtime
 from .services import ErroDeDominio
 from .sheets_nivelamento import SheetsNivelamento
+from .google_auth import callback as oauth_callback, login as oauth_login, setting as oauth_setting, user as oauth_user
+from .organizacao import ConfigError, DomainError, organization
 
 BASE = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE / "static"
 
 
 app = FastAPI(title="Vôlei Djalmer", version="0.1.0")
+app.add_middleware(SessionMiddleware, secret_key=oauth_setting("SESSION_SECRET") or "oauth-not-configured", https_only=os.getenv("APP_ENV", "local") != "local" or bool(os.getenv("VERCEL")), same_site="lax")
 sheets_nivelamento = SheetsNivelamento()
 
 
@@ -175,6 +182,109 @@ def importar_nivelamento(payload: dict):
         return {"ok": True, "atletas": sheets_nivelamento.importar()}
     except Exception as exc:
         raise HTTPException(status_code=400, detail=detalhe_sheets(exc))
+
+
+# -- Organização ------------------------------------------------------
+def _organization(fn):
+    try:
+        return fn()
+    except ConfigError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except (DomainError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.get("/auth/login")
+def login_google(request: Request, next: str = "/"):
+    return oauth_login(request, next)
+
+
+@app.get("/auth/callback")
+def callback_google(request: Request, code: str = "", state: str = ""):
+    return oauth_callback(request, code, state)
+
+
+@app.post("/auth/logout")
+def logout_google(request: Request):
+    request.session.clear()
+    return {"ok": True}
+
+
+@app.get("/api/auth/me")
+def me_google(request: Request):
+    actor = oauth_user(request)
+    return {"name": actor["name"], "email": actor["email"]}
+
+
+@app.post("/api/organizacao/prepare")
+def prepare_organization(request: Request):
+    oauth_user(request)
+    return _organization(lambda: (organization.prepare(), {"ok": True})[1])
+
+
+@app.post("/api/organizacao/events")
+def create_event(request: Request, payload: dict):
+    return _organization(lambda: organization.create_event(payload, oauth_user(request)))
+
+
+@app.get("/api/public/events/{slug}")
+def public_event(slug: str):
+    return _organization(lambda: organization.public_event(slug))
+
+
+@app.post("/api/public/events/{slug}/join")
+def join_event(slug: str, request: Request):
+    return _organization(lambda: organization.join(slug, oauth_user(request)))
+
+
+@app.post("/api/public/events/{slug}/guests")
+def add_guest(slug: str, request: Request, payload: dict):
+    return _organization(lambda: organization.add_guest(slug, payload.get("nome", ""), oauth_user(request)))
+
+
+@app.get("/api/public/events/{slug}/mine")
+def my_event_registration(slug: str, request: Request):
+    return _organization(lambda: organization.mine(slug, oauth_user(request)))
+
+
+@app.post("/api/public/events/{slug}/proofs")
+async def upload_own_proof(slug: str, request: Request, subject_id: str = Form(...), file: UploadFile = File(...)):
+    return _organization(lambda: organization.upload_proof(slug, "registration", subject_id, oauth_user(request), file.filename or "comprovante", file.content_type or "", file.file.read()))
+
+
+@app.post("/api/organizacao/events/{slug}/guests/{guest_id}/proofs")
+async def upload_guest_proof(slug: str, guest_id: str, request: Request, file: UploadFile = File(...)):
+    return _organization(lambda: organization.upload_proof(slug, "guest", guest_id, oauth_user(request), file.filename or "comprovante", file.content_type or "", file.file.read()))
+
+
+@app.get("/api/organizacao/events/{slug}/proofs")
+def list_proofs(slug: str, request: Request):
+    return _organization(lambda: organization.proofs(slug, oauth_user(request)))
+
+
+@app.get("/api/organizacao/events/{slug}/details")
+def commission_event_details(slug: str, request: Request):
+    return _organization(lambda: organization.commission_details(slug, oauth_user(request)))
+
+
+@app.post("/api/organizacao/proofs/{proof_id}/approve")
+def approve_proof(proof_id: str, request: Request):
+    return _organization(lambda: organization.approve(proof_id, oauth_user(request)))
+
+
+@app.get("/api/organizacao/proofs/{proof_id}/download")
+def download_proof(proof_id: str, request: Request):
+    def action():
+        proof = next((p for p in organization.store.rows("PaymentProofs") if p["id"] == proof_id), None)
+        event = proof and next((e for e in organization.store.rows("Event") if e["id"] == proof["event_id"]), None)
+        if not proof or not event or not organization.commission(event, oauth_user(request)["email"]): raise DomainError("Apenas a comissão pode baixar comprovantes.")
+        return Response(organization.store.download(proof["drive_file_id"]), media_type=proof["mime_type"], headers={"Content-Disposition": f'attachment; filename="{proof["nome_arquivo"]}"'})
+    return _organization(action)
+
+
+@app.get("/lista/{slug}")
+def lista_publica(slug: str):
+    return FileResponse(STATIC_DIR / "lista.html")
 
 
 app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")

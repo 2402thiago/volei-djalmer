@@ -180,6 +180,10 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .potes-adicionais label { display: flex; gap: 4px; align-items: center; font-size: 12px; }
 .filtros-cadastro { margin-top: 10px; margin-bottom: 0; }
 .config-sheets { display: grid; gap: 8px; margin-bottom: 10px; }
+.formulario-organizacao { display: grid; gap: 10px; }
+.pagina-publica { max-width: 620px; margin: 32px auto; padding: 20px; }
+.pagina-publica li { padding: 6px 0; }
+.link-botao { display: inline-block; text-decoration: none; }
 .resultados-vinculo { display: grid; gap: 6px; margin-top: 8px; }
 .resultado-vinculo { text-align: left; font-size: 13px; }
 .progresso-tarefa { position: fixed; z-index: 20; right: max(16px, calc((100vw - 520px) / 2 + 16px)); bottom: 82px; width: min(360px, calc(100% - 32px)); padding: 14px; border-radius: var(--raio); background: var(--card); box-shadow: 0 12px 32px rgba(20, 24, 40, 0.22); }
