@@ -58,6 +58,24 @@ def valid_file(filename, mime, data):
     return filename
 
 
+def drive_error_message(exc) -> str:
+    status = getattr(getattr(exc, "resp", None), "status", None)
+    try:
+        payload = json.loads(getattr(exc, "content", b"").decode("utf-8"))
+        reason = payload.get("error", {}).get("errors", [{}])[0].get("reason", "")
+    except (AttributeError, TypeError, ValueError, UnicodeDecodeError):
+        reason = ""
+    if reason == "accessNotConfigured":
+        return "A API Google Drive não está habilitada para a conta de serviço. Ative-a no Google Cloud."
+    if reason == "storageQuotaExceeded":
+        return "A conta usada pelo Google Drive não possui espaço disponível para receber comprovantes."
+    if status == 404:
+        return "A pasta de comprovantes não foi encontrada ou não foi compartilhada com a conta de serviço. Verifique GOOGLE_DRIVE_FOLDER_ID."
+    if status == 403:
+        return "A conta de serviço não tem permissão para enviar arquivos à pasta. Compartilhe-a com o client_email como Editor."
+    return "Não foi possível enviar o comprovante ao Google Drive. Verifique a pasta, a permissão da conta de serviço e a API Google Drive."
+
+
 class GoogleOrganizationStore:
     """Pequeno adaptador gspread, deliberadamente sem apagar abas existentes."""
     def __init__(self):
@@ -133,15 +151,23 @@ class GoogleOrganizationStore:
             raise ConfigError("Organização não configurada: defina GOOGLE_DRIVE_FOLDER_ID.")
         try:
             from googleapiclient.discovery import build
+            from googleapiclient.errors import HttpError
             from googleapiclient.http import MediaIoBaseUpload
             if self._drive is None:
                 self._drive = build("drive", "v3", credentials=self._credentials(), cache_discovery=False)
-            item = self._drive.files().create(body={"name": filename, "parents": [folder]}, media_body=MediaIoBaseUpload(io.BytesIO(data), mimetype=mime, resumable=False), fields="id").execute()
+            target = self._drive.files().get(fileId=folder, fields="id,mimeType,capabilities(canAddChildren)", supportsAllDrives=True).execute()
+            if target.get("mimeType") != "application/vnd.google-apps.folder":
+                raise ConfigError("GOOGLE_DRIVE_FOLDER_ID deve apontar para uma pasta do Google Drive.")
+            if not target.get("capabilities", {}).get("canAddChildren"):
+                raise ConfigError("A conta de serviço não pode adicionar arquivos à pasta. Compartilhe-a com o client_email como Editor.")
+            item = self._drive.files().create(body={"name": filename, "parents": [folder]}, media_body=MediaIoBaseUpload(io.BytesIO(data), mimetype=mime, resumable=False), fields="id", supportsAllDrives=True).execute()
             return item["id"]
         except ConfigError:
             raise
+        except HttpError as exc:
+            raise ConfigError(drive_error_message(exc)) from exc
         except Exception as exc:
-            raise ConfigError("Não foi possível enviar o comprovante ao Google Drive.") from exc
+            raise ConfigError("Não foi possível enviar o comprovante ao Google Drive. Verifique a pasta, a permissão da conta de serviço e a API Google Drive.") from exc
 
     def download(self, file_id):
         try:
@@ -149,7 +175,7 @@ class GoogleOrganizationStore:
             from googleapiclient.http import MediaIoBaseDownload
             if self._drive is None:
                 self._drive = build("drive", "v3", credentials=self._credentials(), cache_discovery=False)
-            request = self._drive.files().get_media(fileId=file_id)
+            request = self._drive.files().get_media(fileId=file_id, supportsAllDrives=True)
             output = io.BytesIO()
             downloader = MediaIoBaseDownload(output, request)
             done = False

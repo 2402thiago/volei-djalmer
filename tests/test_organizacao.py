@@ -1,6 +1,6 @@
 import pytest
 
-from app.organizacao import ConfigError, EVENTS, GUESTS, REGISTRATIONS, SHEETS, GoogleOrganizationStore, OrganizationService
+from app.organizacao import ConfigError, EVENTS, GUESTS, REGISTRATIONS, SHEETS, GoogleOrganizationStore, OrganizationService, drive_error_message
 
 
 class FakeStore:
@@ -127,3 +127,15 @@ def test_organization_does_not_overwrite_sheet_with_records_and_wrong_header():
     with pytest.raises(ConfigError, match="contém dados"):
         store._worksheet(EVENTS)
     assert not worksheet.cleared
+
+
+class DriveFailure:
+    def __init__(self, status, reason):
+        self.resp = type("Response", (), {"status": status})()
+        self.content = ('{"error":{"errors":[{"reason":"' + reason + '"}]}}').encode()
+
+
+def test_drive_error_message_explains_folder_access_and_api_failures():
+    assert "GOOGLE_DRIVE_FOLDER_ID" in drive_error_message(DriveFailure(404, "notFound"))
+    assert "Editor" in drive_error_message(DriveFailure(403, "insufficientPermissions"))
+    assert "API Google Drive" in drive_error_message(DriveFailure(403, "accessNotConfigured"))
