@@ -50,8 +50,25 @@
   async function organizerPage() {
     const message = document.querySelector("#msg-organizacao"), user = document.querySelector("#org-usuario");
     if (!message) return;
-    try { const me = await api("/api/auth/me"); user.textContent = me.email; }
-    catch (_) { /* Login button remains available. */ }
+    const form = document.querySelector("#form-evento");
+    const bloquearFormulario = (bloquear) => form.querySelectorAll("input, button").forEach(element => { element.disabled = bloquear; });
+    bloquearFormulario(true);
+    try {
+      const me = await api("/api/auth/me");
+      user.textContent = me.email;
+      const access = await api("/api/organizacao/access");
+      if (access.allowed) {
+        bloquearFormulario(false);
+        message.textContent = "E-mail autorizado. Preencha os dados para criar a lista pública.";
+        message.className = "msg";
+      } else {
+        message.textContent = `O e-mail ${me.email} não está autorizado. Adicione-o na aba Acessos com ativo = sim.`;
+        message.className = "msg erro";
+      }
+    } catch (error) {
+      message.textContent = error.message.includes("Faça login") ? "Entre com Google para liberar a criação de eventos." : error.message;
+      message.className = "msg erro";
+    }
     document.querySelector("#btn-login-organizacao").onclick = () => location.href = "/auth/login?next=/";
     document.querySelector("#form-evento").onsubmit = async (e) => {
       e.preventDefault();
@@ -60,7 +77,7 @@
         const event = await api("/api/organizacao/events", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)});
         const url = `${location.origin}/lista/${event.slug}`;
         message.innerHTML = `Evento criado: <a href="${url}" target="_blank" rel="noopener">${url}</a>`;
-      } catch (error) { message.textContent = error.message; }
+      } catch (error) { message.textContent = error.message; message.className = "msg erro"; }
     };
     document.querySelector("#btn-carregar-comprovantes").onclick = async () => {
       const eventSlug = document.querySelector("#comissao-slug").value.trim();

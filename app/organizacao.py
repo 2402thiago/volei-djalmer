@@ -156,8 +156,10 @@ class OrganizationService:
         # Acessos is owned by the existing Nivelamento integration.
         try:
             rows = self.store._spreadsheet().worksheet("Acessos").get_all_values()
-        except Exception:
-            return False
+        except ConfigError:
+            raise
+        except Exception as exc:
+            raise ConfigError("Não foi possível ler a aba Acessos. Crie as colunas email e ativo na planilha Google.") from exc
         return any(len(r) > 1 and r[0].strip().casefold() == email.casefold() and r[1].strip().casefold() == "sim" for r in rows[1:])
     def create_event(self, data, actor):
         self.prepare()

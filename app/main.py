@@ -222,6 +222,14 @@ def prepare_organization(request: Request):
     return _organization(lambda: (organization.prepare(), {"ok": True})[1])
 
 
+@app.get("/api/organizacao/access")
+def organization_access(request: Request):
+    def action():
+        actor = oauth_user(request)
+        return {"email": actor["email"], "allowed": organization.organizer_allowed(actor["email"])}
+    return _organization(action)
+
+
 @app.post("/api/organizacao/events")
 def create_event(request: Request, payload: dict):
     return _organization(lambda: organization.create_event(payload, oauth_user(request)))
