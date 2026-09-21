@@ -10,7 +10,7 @@ class FakeStore:
     def add(self, name, row): self.data[name].append(dict(row))
     def update(self, name, row_id, changes):
         next(r for r in self.data[name] if r["id"] == row_id).update(changes)
-    def upload(self, filename, mime, data): return "drive-1"
+    def upload(self, filename, mime, data, uploader_credentials): self.uploader_credentials = uploader_credentials; return "drive-1"
 
 
 class Service(OrganizationService):
@@ -38,14 +38,14 @@ def test_join_once_and_reserve_after_released_slots():
 def test_guest_only_promotes_when_released_slot_is_available():
     service = Service(FakeStore()); created = event(service, released=1)
     guest = service.add_guest(created["slug"], "Convidada", PLAYER) if service.join(created["slug"], PLAYER) else None
-    proof = service.upload_proof(created["slug"], "guest", guest["id"], ORGANIZER, "x.pdf", "application/pdf", b"%PDF-1.7")
+    proof = service.upload_proof(created["slug"], "guest", guest["id"], ORGANIZER, "x.pdf", "application/pdf", b"%PDF-1.7", None)
     service.approve(proof["id"], ORGANIZER)
     assert service.store.rows(GUESTS)[0]["status"] == "confirmado"
 
 
 def test_participant_proof_is_private_and_confirmed_after_approval():
     service = Service(FakeStore()); created = event(service); registration = service.join(created["slug"], PLAYER)
-    proof = service.upload_proof(created["slug"], "registration", registration["id"], PLAYER, "x.png", "image/png", b"\x89PNG\r\n\x1a\nbody")
+    proof = service.upload_proof(created["slug"], "registration", registration["id"], PLAYER, "x.png", "image/png", b"\x89PNG\r\n\x1a\nbody", None)
     service.approve(proof["id"], ORGANIZER)
     assert service.store.rows(REGISTRATIONS)[0]["pagamento"] == "confirmado"
 
@@ -54,7 +54,7 @@ def test_public_data_includes_pix_guests_and_commission_proof_name():
     service = Service(FakeStore()); created = event(service)
     registration = service.join(created["slug"], PLAYER)
     guest = service.add_guest(created["slug"], "Convidada", PLAYER)
-    proof = service.upload_proof(created["slug"], "guest", guest["id"], ORGANIZER, "guest.pdf", "application/pdf", b"%PDF-1.7")
+    proof = service.upload_proof(created["slug"], "guest", guest["id"], ORGANIZER, "guest.pdf", "application/pdf", b"%PDF-1.7", None)
     public = service.public_event(created["slug"])
     assert public["event"]["pix"] == ""
     assert public["guests"] == [{"nome": "Convidada", "status": "pendente"}]
@@ -66,7 +66,7 @@ def test_public_data_includes_pix_guests_and_commission_proof_name():
 def test_rejects_file_with_spoofed_mime_type():
     service = Service(FakeStore()); created = event(service); registration = service.join(created["slug"], PLAYER)
     try:
-        service.upload_proof(created["slug"], "registration", registration["id"], PLAYER, "bad.png", "image/png", b"not-a-png")
+        service.upload_proof(created["slug"], "registration", registration["id"], PLAYER, "bad.png", "image/png", b"not-a-png", None)
         assert False, "invalid file signature must be rejected"
     except ValueError:
         pass
@@ -76,9 +76,9 @@ def test_rejects_duplicate_proof_for_the_same_guest():
     service = Service(FakeStore()); created = event(service)
     service.join(created["slug"], PLAYER)
     guest = service.add_guest(created["slug"], "Convidada", PLAYER)
-    service.upload_proof(created["slug"], "guest", guest["id"], ORGANIZER, "guest.pdf", "application/pdf", b"%PDF-1.7")
+    service.upload_proof(created["slug"], "guest", guest["id"], ORGANIZER, "guest.pdf", "application/pdf", b"%PDF-1.7", None)
     try:
-        service.upload_proof(created["slug"], "guest", guest["id"], ORGANIZER, "guest-2.pdf", "application/pdf", b"%PDF-1.7")
+        service.upload_proof(created["slug"], "guest", guest["id"], ORGANIZER, "guest-2.pdf", "application/pdf", b"%PDF-1.7", None)
         assert False, "duplicate proof must be rejected"
     except ValueError:
         pass
@@ -136,6 +136,13 @@ class DriveFailure:
 
 
 def test_drive_error_message_explains_folder_access_and_api_failures():
-    assert "GOOGLE_DRIVE_FOLDER_ID" in drive_error_message(DriveFailure(404, "notFound"))
-    assert "Editor" in drive_error_message(DriveFailure(403, "insufficientPermissions"))
+    assert "login novamente" in drive_error_message(DriveFailure(404, "notFound"))
+    assert "autorizar" in drive_error_message(DriveFailure(403, "insufficientPermissions"))
     assert "API Google Drive" in drive_error_message(DriveFailure(403, "accessNotConfigured"))
+
+
+def test_proof_upload_uses_the_authenticated_users_drive_credential():
+    service = Service(FakeStore()); created = event(service); registration = service.join(created["slug"], PLAYER)
+    credentials = object()
+    service.upload_proof(created["slug"], "registration", registration["id"], PLAYER, "x.pdf", "application/pdf", b"%PDF-1.7", credentials)
+    assert service.store.uploader_credentials is credentials

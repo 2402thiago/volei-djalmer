@@ -66,14 +66,14 @@ def drive_error_message(exc) -> str:
     except (AttributeError, TypeError, ValueError, UnicodeDecodeError):
         reason = ""
     if reason == "accessNotConfigured":
-        return "A API Google Drive não está habilitada para a conta de serviço. Ative-a no Google Cloud."
+        return "A API Google Drive não está habilitada no projeto Google. Ative-a no Google Cloud."
     if reason == "storageQuotaExceeded":
-        return "A conta usada pelo Google Drive não possui espaço disponível para receber comprovantes."
+        return "A conta Google usada para enviar o comprovante não possui espaço disponível."
     if status == 404:
-        return "A pasta de comprovantes não foi encontrada ou não foi compartilhada com a conta de serviço. Verifique GOOGLE_DRIVE_FOLDER_ID."
+        return "O arquivo não foi encontrado no Google Drive. Faça login novamente e tente enviar o comprovante."
     if status == 403:
-        return "A conta de serviço não tem permissão para enviar arquivos à pasta. Compartilhe-a com o client_email como Editor."
-    return "Não foi possível enviar o comprovante ao Google Drive. Verifique a pasta, a permissão da conta de serviço e a API Google Drive."
+        return "O Google Drive recusou o envio. Faça login novamente para autorizar o acesso ao Drive."
+    return "Não foi possível enviar o comprovante ao Google Drive. Faça login novamente e tente de novo."
 
 
 class GoogleOrganizationStore:
@@ -145,29 +145,21 @@ class GoogleOrganizationStore:
                 return
         raise DomainError("Registro não encontrado.")
 
-    def upload(self, filename, mime, data):
-        folder = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "").strip()
-        if not folder:
-            raise ConfigError("Organização não configurada: defina GOOGLE_DRIVE_FOLDER_ID.")
+    def upload(self, filename, mime, data, uploader_credentials):
         try:
             from googleapiclient.discovery import build
             from googleapiclient.errors import HttpError
             from googleapiclient.http import MediaIoBaseUpload
-            if self._drive is None:
-                self._drive = build("drive", "v3", credentials=self._credentials(), cache_discovery=False)
-            target = self._drive.files().get(fileId=folder, fields="id,mimeType,capabilities(canAddChildren)", supportsAllDrives=True).execute()
-            if target.get("mimeType") != "application/vnd.google-apps.folder":
-                raise ConfigError("GOOGLE_DRIVE_FOLDER_ID deve apontar para uma pasta do Google Drive.")
-            if not target.get("capabilities", {}).get("canAddChildren"):
-                raise ConfigError("A conta de serviço não pode adicionar arquivos à pasta. Compartilhe-a com o client_email como Editor.")
-            item = self._drive.files().create(body={"name": filename, "parents": [folder]}, media_body=MediaIoBaseUpload(io.BytesIO(data), mimetype=mime, resumable=False), fields="id", supportsAllDrives=True).execute()
+            drive = build("drive", "v3", credentials=uploader_credentials, cache_discovery=False)
+            item = drive.files().create(body={"name": filename}, media_body=MediaIoBaseUpload(io.BytesIO(data), mimetype=mime, resumable=False), fields="id").execute()
+            drive.permissions().create(fileId=item["id"], body={"type": "user", "role": "reader", "emailAddress": self._credentials().service_account_email}, sendNotificationEmail=False).execute()
             return item["id"]
         except ConfigError:
             raise
         except HttpError as exc:
             raise ConfigError(drive_error_message(exc)) from exc
         except Exception as exc:
-            raise ConfigError("Não foi possível enviar o comprovante ao Google Drive. Verifique a pasta, a permissão da conta de serviço e a API Google Drive.") from exc
+            raise ConfigError("Não foi possível enviar o comprovante ao Google Drive. Faça login novamente e tente de novo.") from exc
 
     def download(self, file_id):
         try:
@@ -270,7 +262,7 @@ class OrganizationService:
         return {"registration": registration, "guests": [g for g in self.store.rows(GUESTS) if g["registration_id"] == registration["id"]]}
     def commission(self, event, email):
         return any(c["event_id"] == event["id"] and c["email"].casefold() == email.casefold() for c in self.store.rows(COMMISSIONS))
-    def upload_proof(self, slug, kind, subject_id, actor, filename, mime, data):
+    def upload_proof(self, slug, kind, subject_id, actor, filename, mime, data, uploader_credentials):
         filename = valid_file(filename, mime, data)
         event = self.event(slug)
         if not event: raise DomainError("Evento não encontrado.")
@@ -285,7 +277,7 @@ class OrganizationService:
         else: raise DomainError("Tipo de comprovante inválido.")
         if any(p["event_id"] == event["id"] and p["tipo"] == kind and p["subject_id"] == subject_id for p in self.store.rows(PAYMENT_PROOFS)):
             raise DomainError("Já existe um comprovante enviado para esta inscrição.")
-        proof = {"id": uuid.uuid4().hex, "event_id": event["id"], "tipo": kind, "subject_id": subject_id, "drive_file_id": self.store.upload(filename, mime, data), "nome_arquivo": filename, "mime_type": mime, "tamanho": len(data), "status": "pendente", "enviado_por": actor["email"], "enviado_em": now(), "aprovado_por": ""}
+        proof = {"id": uuid.uuid4().hex, "event_id": event["id"], "tipo": kind, "subject_id": subject_id, "drive_file_id": self.store.upload(filename, mime, data, uploader_credentials), "nome_arquivo": filename, "mime_type": mime, "tamanho": len(data), "status": "pendente", "enviado_por": actor["email"], "enviado_em": now(), "aprovado_por": ""}
         self.store.add(PAYMENT_PROOFS, proof); return proof
     def proofs(self, slug, actor):
         event = self.event(slug)

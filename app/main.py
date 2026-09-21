@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from .runtime import runtime
 from .services import ErroDeDominio
 from .sheets_nivelamento import SheetsNivelamento
-from .google_auth import callback as oauth_callback, login as oauth_login, setting as oauth_setting, user as oauth_user
+from .google_auth import callback as oauth_callback, drive_credentials, login as oauth_login, setting as oauth_setting, user as oauth_user
 from .organizacao import EVENTS, PAYMENT_PROOFS, ConfigError, DomainError, organization
 
 BASE = Path(__file__).resolve().parent.parent
@@ -264,12 +264,12 @@ def my_event_registration(slug: str, request: Request):
 
 @app.post("/api/public/events/{slug}/proofs")
 async def upload_own_proof(slug: str, request: Request, subject_id: str = Form(...), file: UploadFile = File(...)):
-    return _organization(lambda: organization.upload_proof(slug, "registration", subject_id, oauth_user(request), file.filename or "comprovante", file.content_type or "", file.file.read()))
+    return _organization(lambda: organization.upload_proof(slug, "registration", subject_id, oauth_user(request), file.filename or "comprovante", file.content_type or "", file.file.read(), drive_credentials(request)))
 
 
 @app.post("/api/organizacao/events/{slug}/guests/{guest_id}/proofs")
 async def upload_guest_proof(slug: str, guest_id: str, request: Request, file: UploadFile = File(...)):
-    return _organization(lambda: organization.upload_proof(slug, "guest", guest_id, oauth_user(request), file.filename or "comprovante", file.content_type or "", file.file.read()))
+    return _organization(lambda: organization.upload_proof(slug, "guest", guest_id, oauth_user(request), file.filename or "comprovante", file.content_type or "", file.file.read(), drive_credentials(request)))
 
 
 @app.get("/api/organizacao/events/{slug}/proofs")
