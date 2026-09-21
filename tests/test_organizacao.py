@@ -1,4 +1,6 @@
-from app.organizacao import EVENTS, GUESTS, REGISTRATIONS, SHEETS, OrganizationService
+import pytest
+
+from app.organizacao import ConfigError, EVENTS, GUESTS, REGISTRATIONS, SHEETS, GoogleOrganizationStore, OrganizationService
 
 
 class FakeStore:
@@ -92,3 +94,36 @@ def test_open_events_only_returns_future_events_for_creator_or_commission():
 def test_organization_uses_namespaced_sheets_to_avoid_existing_tab_names():
     assert EVENTS == "OrganizacaoEventos"
     assert "Event" not in SHEETS
+
+
+class Worksheet:
+    def __init__(self, values): self.values = values; self.cleared = False
+    def get_all_values(self): return self.values
+    def clear(self): self.values = []; self.cleared = True
+    def append_row(self, row, **_): self.values.append(row)
+
+
+class Book:
+    def __init__(self, worksheet): self.worksheet_value = worksheet
+    def worksheet(self, _): return self.worksheet_value
+
+
+def organization_store_with(values):
+    store = GoogleOrganizationStore()
+    worksheet = Worksheet(values)
+    store._book = Book(worksheet)
+    return store, worksheet
+
+
+def test_organization_repairs_wrong_header_when_sheet_has_no_records():
+    store, worksheet = organization_store_with([["Eventos"]])
+    store._worksheet(EVENTS)
+    assert worksheet.cleared
+    assert worksheet.values == [SHEETS[EVENTS]]
+
+
+def test_organization_does_not_overwrite_sheet_with_records_and_wrong_header():
+    store, worksheet = organization_store_with([["Eventos"], ["evento existente"]])
+    with pytest.raises(ConfigError, match="contém dados"):
+        store._worksheet(EVENTS)
+    assert not worksheet.cleared

@@ -94,10 +94,14 @@ class GoogleOrganizationStore:
             ws = book.worksheet(name)
         except Exception:
             ws = book.add_worksheet(title=name, rows=1000, cols=len(SHEETS[name]))
-        if not ws.get_all_values():
+        values = ws.get_all_values()
+        if not values:
             ws.append_row(SHEETS[name], value_input_option="RAW")
-        elif ws.get_all_values()[0] != SHEETS[name]:
-            raise ConfigError(f"A aba {name} não possui a estrutura esperada. Crie uma nova aba com esse nome ou ajuste os cabeçalhos.")
+        elif values[0] != SHEETS[name]:
+            if any(any(cell for cell in row) for row in values[1:]):
+                raise ConfigError(f"A aba {name} não possui a estrutura esperada e contém dados. Corrija os cabeçalhos sem remover os registros.")
+            ws.clear()
+            ws.append_row(SHEETS[name], value_input_option="RAW")
         return ws
 
     def prepare(self):
