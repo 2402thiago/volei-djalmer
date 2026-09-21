@@ -6,7 +6,7 @@ import json
 import os
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -184,6 +184,24 @@ class OrganizationService:
         return event
     def event(self, slug):
         return next((e for e in self.store.rows("Event") if e["slug"] == slug), None)
+    def open_events(self, actor):
+        today = date.today().isoformat()
+        email = actor["email"].casefold()
+        commissions = {c["event_id"] for c in self.store.rows("Commissions") if c["email"].casefold() == email}
+        registrations = self.store.rows("Registrations")
+        events = []
+        for event in self.store.rows("Event"):
+            if event["data"] < today or (event["criador_email"].casefold() != email and event["id"] not in commissions):
+                continue
+            event_registrations = [r for r in registrations if r["event_id"] == event["id"]]
+            events.append({
+                "slug": event["slug"], "titulo": event["titulo"], "data": event["data"],
+                "hora_inicio": event["hora_inicio"], "hora_fim": event["hora_fim"],
+                "capacidade": int(event["capacidade"]),
+                "principais": sum(r["lista"] == "principal" for r in event_registrations),
+                "reservas": sum(r["lista"] == "reserva" for r in event_registrations),
+            })
+        return sorted(events, key=lambda event: (event["data"], event["hora_inicio"], event["titulo"]))
     def public_event(self, slug):
         event = self.event(slug)
         if not event: raise DomainError("Evento não encontrado.")

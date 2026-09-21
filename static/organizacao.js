@@ -51,7 +51,21 @@
     const message = document.querySelector("#msg-organizacao"), user = document.querySelector("#org-usuario");
     if (!message) return;
     const form = document.querySelector("#form-evento");
+    const eventosAbertos = document.querySelector("#eventos-abertos");
     const bloquearFormulario = (bloquear) => form.querySelectorAll("input, button").forEach(element => { element.disabled = bloquear; });
+    const carregarEventosAbertos = async () => {
+      try {
+        const eventos = await api("/api/organizacao/events");
+        eventosAbertos.innerHTML = eventos.length ? eventos.map(evento => {
+          const url = `${location.origin}/lista/${evento.slug}`;
+          return `<article class="evento-aberto"><h3>${esc(evento.titulo)}</h3><p>${esc(evento.data)} · ${esc(evento.hora_inicio)}-${esc(evento.hora_fim)}</p><p>${evento.principais} de ${evento.capacidade} vagas principais · ${evento.reservas} na reserva</p><div class="linha linha-acoes"><a class="secundario link-botao" href="${url}" target="_blank" rel="noopener">Abrir lista</a><button class="secundario" data-gerenciar-evento="${esc(evento.slug)}">Gerenciar</button></div></article>`;
+        }).join("") : '<p class="msg">Nenhum evento em aberto.</p>';
+        eventosAbertos.querySelectorAll("[data-gerenciar-evento]").forEach(button => button.onclick = () => {
+          document.querySelector("#comissao-slug").value = button.dataset.gerenciarEvento;
+          document.querySelector("#btn-carregar-comprovantes").click();
+        });
+      } catch (error) { eventosAbertos.innerHTML = `<p class="msg erro">${esc(error.message)}</p>`; }
+    };
     bloquearFormulario(true);
     try {
       const me = await api("/api/auth/me");
@@ -61,6 +75,7 @@
         bloquearFormulario(false);
         message.textContent = "E-mail autorizado. Preencha os dados para criar a lista pública.";
         message.className = "msg";
+        carregarEventosAbertos();
       } else {
         message.textContent = `O e-mail ${me.email} não está autorizado. Adicione-o na aba Acessos com ativo = sim.`;
         message.className = "msg erro";
@@ -77,6 +92,7 @@
         const event = await api("/api/organizacao/events", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)});
         const url = `${location.origin}/lista/${event.slug}`;
         message.innerHTML = `Evento criado: <a href="${url}" target="_blank" rel="noopener">${url}</a>`;
+        carregarEventosAbertos();
       } catch (error) { message.textContent = error.message; message.className = "msg erro"; }
     };
     document.querySelector("#btn-carregar-comprovantes").onclick = async () => {

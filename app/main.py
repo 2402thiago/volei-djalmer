@@ -235,6 +235,11 @@ def create_event(request: Request, payload: dict):
     return _organization(lambda: organization.create_event(payload, oauth_user(request)))
 
 
+@app.get("/api/organizacao/events")
+def open_organization_events(request: Request):
+    return _organization(lambda: organization.open_events(oauth_user(request)))
+
+
 @app.get("/api/public/events/{slug}")
 def public_event(slug: str):
     return _organization(lambda: organization.public_event(slug))

@@ -20,7 +20,7 @@ PLAYER = {"sub": "2", "name": "Ana", "email": "ana@example.com"}
 
 
 def event(service, released=1):
-    return service.create_event({"titulo": "Jogo", "data": "2026-10-01", "hora_inicio": "19:00", "hora_fim": "21:00", "capacidade": 2, "vagas_liberadas": released}, ORGANIZER)
+    return service.create_event({"titulo": "Jogo", "data": "2099-10-01", "hora_inicio": "19:00", "hora_fim": "21:00", "capacidade": 2, "vagas_liberadas": released}, ORGANIZER)
 
 
 def test_join_once_and_reserve_after_released_slots():
@@ -80,3 +80,10 @@ def test_rejects_duplicate_proof_for_the_same_guest():
         assert False, "duplicate proof must be rejected"
     except ValueError:
         pass
+
+
+def test_open_events_only_returns_future_events_for_creator_or_commission():
+    service = Service(FakeStore())
+    future = event(service)
+    service.store.add("Event", {"id": "old", "slug": "old", "titulo": "Antigo", "data": "2000-01-01", "hora_inicio": "19:00", "hora_fim": "21:00", "capacidade": 24, "vagas_liberadas": 24, "maps_url": "", "valor": "", "pix": "", "criador_email": ORGANIZER["email"], "criado_em": ""})
+    assert [item["slug"] for item in service.open_events(ORGANIZER)] == [future["slug"]]
