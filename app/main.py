@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from .runtime import runtime
 from .services import ErroDeDominio
 from .sheets_nivelamento import SheetsNivelamento
-from .google_auth import callback as oauth_callback, drive_credentials, login as oauth_login, setting as oauth_setting, user as oauth_user
+from .google_auth import callback as oauth_callback, drive_authorized, drive_credentials, login as oauth_login, setting as oauth_setting, user as oauth_user
 from .organizacao import EVENTS, PAYMENT_PROOFS, ConfigError, DomainError, organization
 
 BASE = Path(__file__).resolve().parent.parent
@@ -216,6 +216,12 @@ def logout_google(request: Request):
 def me_google(request: Request):
     actor = oauth_user(request)
     return {"name": actor["name"], "email": actor["email"]}
+
+
+@app.get("/api/auth/drive-status")
+def drive_status_google(request: Request):
+    oauth_user(request)
+    return {"authorized": drive_authorized(request)}
 
 
 @app.post("/api/organizacao/prepare")

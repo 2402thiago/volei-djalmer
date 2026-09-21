@@ -7,6 +7,13 @@
   };
   const esc = (value) => String(value || "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
   const slug = location.pathname.match(/^\/lista\/([^/]+)$/)?.[1];
+  const authorizeDrive = error => {
+    if (/login novamente|autoriza.*google drive|autoriza.*drive/i.test(error.message)) {
+      location.href = `/auth/login?next=${encodeURIComponent(location.pathname)}`;
+      return true;
+    }
+    return false;
+  };
 
   const confirmed = value => value === "confirmado" || value === "promovido";
   const numbered = (items, status) => items.length ? items.map((item, index) => `${index + 1}. ${item.nome}${confirmed(item[status]) ? " ✅" : ""}`).join("\n") : "Nenhum";
@@ -40,7 +47,7 @@
         document.querySelector("#join").textContent = "Você já está na lista";
         document.querySelector("#join").disabled = true;
         document.querySelector("#minha-inscricao").innerHTML = `<h2>Minha inscrição</h2><form id="proof"><input type="file" accept="image/jpeg,image/png,application/pdf" required /><button class="secundario">Enviar meu comprovante</button></form><form id="guest"><input maxlength="80" placeholder="Nome do convidado" required /><button class="secundario">Adicionar convidado</button></form><p>${mine.guests.map(g => `${esc(g.nome)} (${esc(g.status)})`).join("<br>")}</p>`;
-        document.querySelector("#proof").onsubmit = async e => { e.preventDefault(); const form = new FormData(); form.append("subject_id", mine.registration.id); form.append("file", e.currentTarget.querySelector("input").files[0]); try { await api(`/api/public/events/${slug}/proofs`, {method:"POST", body:form}); alert("Comprovante enviado."); } catch (error) { alert(error.message); } };
+        document.querySelector("#proof").onsubmit = async e => { e.preventDefault(); const form = new FormData(); form.append("subject_id", mine.registration.id); form.append("file", e.currentTarget.querySelector("input").files[0]); try { await api(`/api/public/events/${slug}/proofs`, {method:"POST", body:form}); alert("Comprovante enviado."); } catch (error) { if (!authorizeDrive(error)) alert(error.message); } };
         document.querySelector("#guest").onsubmit = async e => { e.preventDefault(); try { await api(`/api/public/events/${slug}/guests`, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({nome:e.currentTarget.querySelector("input").value})}); location.reload(); } catch (error) { alert(error.message); } };
       }
     } catch (_) { /* A visitor may view the public list without a session. */ }
@@ -101,7 +108,7 @@
       try {
         const details = await api(`/api/organizacao/events/${encodeURIComponent(eventSlug)}/details`);
         list.innerHTML = `<h3>Convidados</h3>${details.guests.map(g => g.status === "pendente" ? `<form class="proof-guest" data-guest="${g.id}"><strong>${esc(g.nome)}</strong> (${esc(g.status)}) <input type="file" accept="image/jpeg,image/png,application/pdf" required><button class="secundario">Enviar comprovante</button></form>` : `<p><strong>${esc(g.nome)}</strong> (${esc(g.status)})</p>`).join("") || "Nenhum."}<h3>Comprovantes privados</h3>${details.proofs.map(p => `<p><strong>${esc(p.subject_name)}</strong>: ${esc(p.nome_arquivo)} (${esc(p.status)}) <a href="/api/organizacao/proofs/${p.id}/download">Baixar</a> <button data-proof="${p.id}" ${p.status === "aprovado" ? "disabled" : ""}>Aprovar</button></p>`).join("") || "Nenhum comprovante."}`;
-        list.querySelectorAll("form.proof-guest").forEach(form => form.onsubmit = async e => { e.preventDefault(); const body = new FormData(); body.append("file", form.querySelector("input").files[0]); try { await api(`/api/organizacao/events/${encodeURIComponent(eventSlug)}/guests/${form.dataset.guest}/proofs`, {method:"POST", body}); document.querySelector("#btn-carregar-comprovantes").click(); } catch (error) { alert(error.message); } });
+        list.querySelectorAll("form.proof-guest").forEach(form => form.onsubmit = async e => { e.preventDefault(); const body = new FormData(); body.append("file", form.querySelector("input").files[0]); try { await api(`/api/organizacao/events/${encodeURIComponent(eventSlug)}/guests/${form.dataset.guest}/proofs`, {method:"POST", body}); document.querySelector("#btn-carregar-comprovantes").click(); } catch (error) { if (!authorizeDrive(error)) alert(error.message); } });
         list.querySelectorAll("button[data-proof]").forEach(button => button.onclick = async () => { try { await api(`/api/organizacao/proofs/${button.dataset.proof}/approve`, {method:"POST"}); button.disabled = true; } catch (error) { alert(error.message); } });
       } catch (error) { list.textContent = error.message; }
     };

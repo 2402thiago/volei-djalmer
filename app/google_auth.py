@@ -62,7 +62,7 @@ def callback(request: FastAPIRequest, code: str, state: str):
         from google.oauth2 import id_token
         from google.oauth2.credentials import Credentials
         identity = id_token.verify_oauth2_token(tokens["id_token"], GoogleRequest(), setting("CLIENT_ID"))
-        if not identity.get("sub") or not identity.get("email") or not identity.get("name") or identity.get("email_verified") is not True:
+        if not tokens.get("access_token") or not identity.get("sub") or not identity.get("email") or not identity.get("name") or identity.get("email_verified") is not True:
             raise ValueError("perfil incompleto")
     except Exception as exc:
         raise HTTPException(status_code=401, detail="Não foi possível validar a identidade Google.") from exc
@@ -97,3 +97,15 @@ def drive_credentials(request: FastAPIRequest):
     except Exception as exc:
         request.session.pop("drive_credentials", None)
         raise HTTPException(status_code=401, detail="A autorização do Google Drive expirou. Faça login novamente.") from exc
+
+
+def drive_authorized(request: FastAPIRequest):
+    value = request.session.get("drive_credentials")
+    if not value:
+        return False
+    try:
+        from google.oauth2.credentials import Credentials
+        credentials = Credentials.from_authorized_user_info(json.loads(_cipher().decrypt(value.encode())))
+        return bool(credentials.token and (not credentials.expired or credentials.refresh_token))
+    except Exception:
+        return False
