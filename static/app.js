@@ -480,6 +480,34 @@ function vincularParticipantePendente(participante, atleta) {
   renderParticipantes();
 }
 
+function atualizarNomeParticipante(participante, nome) {
+  const atleta = encontrarCadastro(nome);
+  if (atleta && participantes.some((item) => item !== participante && (item.cadastro_id === atleta.id || item.id === atleta.id))) {
+    throw new Error(`${atleta.nome} já está na lista de participantes.`);
+  }
+  if (atleta) {
+    participante.id = atleta.id;
+    participante.cadastro_id = atleta.id;
+    participante.nome = atleta.nome;
+    participante.sexo = atleta.sexo;
+    participante.nivel = atleta.pote || null;
+    participante.ranking = cadastroAtletas.indexOf(atleta) + 1;
+    participante.potes_adicionais = atleta.potesAdicionais;
+  } else {
+    participante.id = novoId();
+    participante.cadastro_id = null;
+    participante.nome = nome;
+    participante.sexo = "";
+    participante.nivel = null;
+    participante.ranking = null;
+    participante.potes_adicionais = [];
+  }
+  delete participante.pote_sorteio;
+  delete participante.promovido_de;
+  participante.atualizado_em = new Date().toISOString();
+  salvarParticipantesLocais();
+}
+
 $("btn-fechar-vinculo-pendente").addEventListener("click", () => $("popup-vincular-pendente").close());
 $("busca-vinculo-pendente").addEventListener("input", () => {
   renderResultadosCadastro($("resultados-vinculo-pendente"), buscarCadastro($("busca-vinculo-pendente").value), (atleta) => {
@@ -604,7 +632,7 @@ function renderParticipantes() {
       <div>
         <div class="nome">${esc(p.nome)}</div>
         <div class="det">${pendente ? "Não cadastrado no nivelamento" : `${p.sexo || "Sexo não definido"} · ${nomePoteSorteio(p.pote_sorteio || p.nivel) || "Pote não definido"} · posição geral ${p.ranking || "não definida"}`}</div>
-      </div>${pendente ? `<div class="linha linha-acoes"><button class="secundario" data-adicionar-pendente="${p.id}">Adicionar ao Cadastro</button><button class="secundario" data-vincular-pendente="${p.id}">Vincular a cadastro existente</button></div>` : ""}`;
+      </div><div class="linha linha-acoes"><button class="secundario" data-editar-participante="${p.id}">Editar nome</button>${pendente ? `<button class="secundario" data-adicionar-pendente="${p.id}">Adicionar ao Cadastro</button><button class="secundario" data-vincular-pendente="${p.id}">Vincular a cadastro existente</button>` : ""}</div>`;
     lista.appendChild(item);
   });
   lista.querySelectorAll("[data-adicionar-pendente]").forEach((botao) => botao.addEventListener("click", () => {
@@ -631,6 +659,21 @@ function renderParticipantes() {
       }
     });
     $("popup-vincular-pendente").showModal();
+  }));
+  lista.querySelectorAll("[data-editar-participante]").forEach((botao) => botao.addEventListener("click", () => {
+    const participante = participantes.find((p) => p.id === botao.dataset.editarParticipante);
+    if (!participante) return;
+    const nome = prompt("Nome do participante", participante.nome);
+    if (nome === null || !nome.trim() || nome.trim() === participante.nome) return;
+    try {
+      atualizarNomeParticipante(participante, nome.trim());
+      limparTimesPresencaEPontos();
+      renderParticipantes();
+      $("msg-importar").textContent = "Nome atualizado. Times, presença e partida atual foram limpos.";
+      $("msg-importar").className = "msg";
+    } catch (erro) {
+      alert(erro.message);
+    }
   }));
 }
 
@@ -799,6 +842,7 @@ const STORAGE_PONTOS = "volei.pontos.v1";
 const STORAGE_PARTIDA_PONTOS = "volei.partida.pontos.v1";
 const STORAGE_TOTAL_PONTOS = "volei.total.pontos.v1";
 const STORAGE_PARTIDAS_ENCERRADAS = "volei.partidas.encerradas.v1";
+const STORAGE_ULTIMO_SORTEIO = "volei.ultimo.sorteio.v1";
 let presenca = { assinatura: "", atletas: {}, ordem: [] };
 let pontos = [];
 let partidaPontos = { timeA: "", timeB: "" };
@@ -809,6 +853,7 @@ try { partidaPontos = JSON.parse(localStorage.getItem(STORAGE_PARTIDA_PONTOS) ||
 let partidasEncerradas;
 try { partidasEncerradas = JSON.parse(localStorage.getItem(STORAGE_PARTIDAS_ENCERRADAS) || "{}") || {}; } catch { partidasEncerradas = {}; }
 if (typeof partidasEncerradas !== "object" || Array.isArray(partidasEncerradas)) partidasEncerradas = {};
+let ultimoSorteio = null;
 function salvarTimesLocais() { localStorage.setItem(STORAGE_TIMES, JSON.stringify(times)); }
 
 function assinaturaTimes() {
@@ -836,6 +881,38 @@ function carregarPresenca() {
 function salvarPontos() { localStorage.setItem(STORAGE_PONTOS, JSON.stringify(pontos)); }
 function salvarPartidaPontos() { localStorage.setItem(STORAGE_PARTIDA_PONTOS, JSON.stringify(partidaPontos)); }
 function salvarPartidasEncerradas() { localStorage.setItem(STORAGE_PARTIDAS_ENCERRADAS, JSON.stringify(partidasEncerradas)); }
+
+function atualizarBotaoDesfazerSorteio() {
+  $("btn-desfazer-sorteio").disabled = !ultimoSorteio;
+}
+
+function salvarUltimoSorteio() {
+  if (!times.length) return;
+  ultimoSorteio = JSON.parse(JSON.stringify({ participantes, times, presenca, pontos, partidaPontos, partidasEncerradas }));
+  localStorage.setItem(STORAGE_ULTIMO_SORTEIO, JSON.stringify(ultimoSorteio));
+  atualizarBotaoDesfazerSorteio();
+}
+
+function carregarUltimoSorteio() {
+  try { ultimoSorteio = JSON.parse(localStorage.getItem(STORAGE_ULTIMO_SORTEIO) || "null"); } catch { ultimoSorteio = null; }
+  if (!ultimoSorteio || !Array.isArray(ultimoSorteio.participantes) || !Array.isArray(ultimoSorteio.times)) ultimoSorteio = null;
+  atualizarBotaoDesfazerSorteio();
+}
+
+function limparTimesPresencaEPontos() {
+  limparTimesEPresenca();
+  pontos = [];
+  partidaPontos = { timeA: "", timeB: "" };
+  partidasEncerradas = {};
+  registroPonto = null;
+  salvarPontos();
+  salvarPartidaPontos();
+  salvarPartidasEncerradas();
+  ultimoSorteio = null;
+  localStorage.removeItem(STORAGE_ULTIMO_SORTEIO);
+  atualizarBotaoDesfazerSorteio();
+  renderPontos();
+}
 
 function carregarPontos() {
   try { pontos = JSON.parse(localStorage.getItem(STORAGE_PONTOS) || "[]"); } catch { pontos = []; }
@@ -1417,7 +1494,9 @@ function montarTimesLocais() {
 
 $("btn-montar").addEventListener("click", async () => {
   try {
-    times = montarTimesLocais();
+    const novosTimes = montarTimesLocais();
+    salvarUltimoSorteio();
+    times = novosTimes;
     salvarTimesLocais();
     reiniciarPresenca();
     renderPontos();
@@ -1430,6 +1509,33 @@ $("btn-montar").addEventListener("click", async () => {
   }
 });
 
+$("btn-desfazer-sorteio").addEventListener("click", () => {
+  if (!ultimoSorteio) return;
+  participantes = ultimoSorteio.participantes;
+  participanteId = new Map(participantes.map((p) => [p.nome, p.id]));
+  times = ultimoSorteio.times;
+  presenca = ultimoSorteio.presenca;
+  pontos = ultimoSorteio.pontos;
+  partidaPontos = ultimoSorteio.partidaPontos;
+  partidasEncerradas = ultimoSorteio.partidasEncerradas;
+  registroPonto = null;
+  salvarParticipantesLocais();
+  salvarTimesLocais();
+  salvarPresenca();
+  salvarPontos();
+  salvarPartidaPontos();
+  salvarPartidasEncerradas();
+  ultimoSorteio = null;
+  localStorage.removeItem(STORAGE_ULTIMO_SORTEIO);
+  atualizarBotaoDesfazerSorteio();
+  renderParticipantes();
+  renderTimes();
+  renderPresenca();
+  renderPontos();
+  $("msg-montar").textContent = "Sorteio anterior restaurado.";
+  $("msg-montar").className = "msg";
+});
+
 async function atualizarDados() {
   await Promise.all([carregarParticipantes(), carregarTimes()]);
   $("indicador-sync").textContent = "Local";
@@ -1439,6 +1545,7 @@ async function atualizarDados() {
 (async function init() {
   carregarCredenciaisDaSessao();
   carregarCadastro();
+  carregarUltimoSorteio();
   await atualizarDados();
 
   // Importar da lista WhatsApp
