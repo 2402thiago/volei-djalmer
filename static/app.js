@@ -354,7 +354,7 @@ function renderCadastro() {
     item.dataset.cadastroId = atleta.id;
     const opcoes = NIVEIS.map((pote) => `<option value="${pote}" ${atleta.pote === pote ? "selected" : ""}>${pote}</option>`).join("");
     const adicionais = NIVEIS.filter((pote) => pote !== atleta.pote).map((pote) => `<label><input type="checkbox" data-pote-adicional="${pote}" ${atleta.potesAdicionais.includes(pote) ? "checked" : ""} />${pote}</label>`).join("");
-    item.innerHTML = `<div class="cabecalho-cadastro"><span>${indice + 1}. <input data-cadastro-nome value="${esc(atleta.nome)}" maxlength="80" /></span><span>Arraste</span></div><div class="linha"><select data-cadastro-sexo><option value="" ${!atleta.sexo ? "selected" : ""}>Sexo</option><option value="F" ${atleta.sexo === "F" ? "selected" : ""}>F</option><option value="M" ${atleta.sexo === "M" ? "selected" : ""}>M</option></select><select data-cadastro-pote><option value="">Pote principal</option>${opcoes}</select></div><div class="det-cadastro">Pote principal: ${atleta.pote || "não definido"} · Também atua em: ${atleta.potesAdicionais.length ? atleta.potesAdicionais.join(", ") : "nenhum"}</div><div class="det-cadastro">Nomes vinculados: ${atleta.aliases.length ? atleta.aliases.map(esc).join(", ") : "nenhum"}</div><div class="potes-adicionais"><span class="det-cadastro">Permissões:</span>${adicionais}</div>`;
+    item.innerHTML = `<div class="cabecalho-cadastro"><span>${indice + 1}. <input data-cadastro-nome value="${esc(atleta.nome)}" maxlength="80" /></span><span>Arraste</span><button class="btn-excluir-cadastro" data-excluir-cadastro="${atleta.id}" title="Excluir atleta">🗑️</button></div><div class="linha"><select data-cadastro-sexo><option value="" ${!atleta.sexo ? "selected" : ""}>Sexo</option><option value="F" ${atleta.sexo === "F" ? "selected" : ""}>F</option><option value="M" ${atleta.sexo === "M" ? "selected" : ""}>M</option></select><select data-cadastro-pote><option value="">Pote principal</option>${opcoes}</select></div><div class="det-cadastro">Pote principal: ${atleta.pote || "não definido"} · Também atua em: ${atleta.potesAdicionais.length ? atleta.potesAdicionais.join(", ") : "nenhum"}</div><div class="det-cadastro">Nomes vinculados: ${atleta.aliases.length ? atleta.aliases.map(esc).join(", ") : "nenhum"}</div><div class="potes-adicionais"><span class="det-cadastro">Permissões:</span>${adicionais}</div>`;
     lista.appendChild(item);
   });
   lista.querySelectorAll("[data-cadastro-nome]").forEach((input) => input.addEventListener("change", () => atualizarCadastro(input.closest("[data-cadastro-id]").dataset.cadastroId, { nome: input.value.trim() })));
@@ -379,6 +379,18 @@ document.querySelectorAll("[data-cadastro-sexo]").forEach((botao) => botao.addEv
   document.querySelectorAll("[data-cadastro-sexo]").forEach((item) => item.classList.toggle("ativo", item === botao));
   renderCadastro();
 }));
+
+document.querySelectorAll("[data-excluir-cadastro]").forEach((botao) => {
+  botao.addEventListener("click", () => {
+    const id = botao.dataset.excluirCadastro;
+    const atleta = cadastroAtletas.find((a) => a.id === id);
+    if (!atleta) return;
+    const confirmar = confirm(`Excluir "${atleta.nome}" do cadastro? Participantes vinculados serão desvinculados e voltarão para "pendente".`);
+    if (confirmar) {
+      excluirAtletaDoCadastro(id);
+    }
+  });
+});
 
 function atualizarCadastro(id, alteracoes) {
   const atleta = cadastroAtletas.find((item) => item.id === id);
@@ -508,50 +520,36 @@ function atualizarNomeParticipante(participante, nome) {
   salvarParticipantesLocais();
 }
 
-function selecionarTop4PorNivel(cadastroAtletas) {
-  // Agrupa por nível principal (pote) mantendo a ordem já existente (mais forte → mais fraco)
-  const agrupar = (chave) => cadastroAtletas.filter((a) => a.pote === chave);
-  const topC1 = agrupar("C1").slice(0, 4);
-  const topLM1 = agrupar("LM1").slice(0, 4);
-  const topLF1 = agrupar("LF1").slice(0, 4);
-  const topM1 = agrupar("M1").slice(0, 4);
-  const topF1 = agrupar("F1").slice(0, 4);
-  const topM2 = agrupar("M2").slice(0, 4);
-  const topF2 = agrupar("F2").slice(0, 4);
-
-  // Completa com próximo da prioridade se faltar: C1 → Levantadores → M1 → F1 → M2 → F2
-  const prioridade = ["C1", "Levantadores", "M1", "F1", "M2", "F2"];
-  const totalNecessario = 24; // 4 times × 6 jogadores
-  const totalDisponivel = topC1.length + topLM1.length + topLF1.length + topM1.length + topF1.length + topM2.length + topF2.length;
-  let faltando = totalNecessario - totalDisponivel;
-
-  let levantadores = [];
-  if (faltando > 0) {
-    // Combina LM1 + LF1 como "Levantadores"
-    levantadores = [...topLM1, ...topLF1];
-    faltando -= levantadores.length;
-  } else {
-    levantadores = [...topLM1, ...topLF1].slice(0, 4);
-  }
-
-  // Se ainda faltar, completa conforme prioridade a partir do que já está disponível
-  const poolExtra = [];
-  for (const nivel of prioridade) {
-    if (faltando <= 0) break;
-    const existentes = agrupar(nivel).slice(4); // já pegamos top 4 acima
-    const quantidade = Math.min(faltando, existentes.length);
-    poolExtra.push(...existentes.slice(0, quantidade));
-    faltando -= quantidade;
-  }
-
-  return {
-    C1: topC1.length >= 4 ? topC1 : [...topC1, ...poolExtra.filter((a) => a.pote === "C1")],
-    Levantadores: levantadores.length >= 4 ? levantadores.slice(0, 4) : levantadores,
-    M1: topM1.length >= 4 ? topM1 : [...topM1, ...poolExtra.filter((a) => a.pote === "M1")],
-    F1: topF1.length >= 4 ? topF1 : [...topF1, ...poolExtra.filter((a) => a.pote === "F1")],
-    M2: topM2.length >= 4 ? topM2 : [...topM2, ...poolExtra.filter((a) => a.pote === "M2")],
-    F2: topF2.length >= 4 ? topF2 : [...topF2, ...poolExtra.filter((a) => a.pote === "F2")],
+function selecionarTop4PorNivel(ativos) {
+  // Ordena pelo ranking da lista master (1 = mais forte)
+  const ordenados = [...ativos].sort((a, b) => (a.ranking || 999) - (b.ranking || 999));
+  const agrupar = (chaves) => ordenados.filter((p) => chaves.includes(p.nivel));
+  const grupos = {
+    C1: agrupar(["C1"]),
+    Levantadores: agrupar(["LM1", "LF1"]),
+    M1: agrupar(["M1"]),
+    F1: agrupar(["F1"]),
+    M2: agrupar(["M2"]),
+    F2: agrupar(["F2"]),
   };
+  // Preenche 4 vagas por categoria; se faltar, completa com os melhores ainda não usados
+  const prioridade = ["C1", "Levantadores", "M1", "F1", "M2", "F2"];
+  const usados = new Set();
+  const selecionados = {};
+  for (const categoria of prioridade) {
+    const proprios = grupos[categoria].filter((p) => !usados.has(p.id));
+    const escolhidos = proprios.slice(0, 4);
+    escolhidos.forEach((p) => usados.add(p.id));
+    const faltam = 4 - escolhidos.length;
+    if (faltam > 0) {
+      const extras = ordenados.filter((p) => !usados.has(p.id)).slice(0, faltam);
+      extras.forEach((p) => usados.add(p.id));
+      selecionados[categoria] = [...escolhidos, ...extras];
+    } else {
+      selecionados[categoria] = escolhidos;
+    }
+  }
+  return selecionados;
 }
 
 function parearC1ComLevantadores(topC1, topLevantadores) {
@@ -568,6 +566,71 @@ function parearC1ComLevantadores(topC1, topLevantadores) {
     { c1: topC1[3], levantador: topLevantadores[0] },
   ];
   return pares;
+}
+
+function distribuirRestantes(top, timesNovos) {
+  // Distribui M1, F1, M2 e F2: 1 de cada por time, equilibrando mulheres e força
+  const forcaGlobal = (p) => 25 - (p.ranking || 24);
+  const categorias = ["M1", "F1", "M2", "F2"];
+  const pendentes = categorias.flatMap((c) => top[c].map((p) => ({ p, c })));
+  pendentes.sort((a, b) => forcaGlobal(b.p) - forcaGlobal(a.p));
+  const totalMulheres = pendentes.filter((i) => i.p.sexo === "F").length +
+    timesNovos.reduce((s, t) => s + t.jogadores.filter((p) => p.sexo === "F").length, 0);
+  const alvos = Array(4).fill(Math.floor(totalMulheres / 4));
+  const resto = totalMulheres % 4;
+  [0, 1, 2, 3].sort(() => Math.random() - 0.5).slice(0, resto).forEach((t) => { alvos[t] += 1; });
+
+  for (const item of pendentes) {
+    const vaga = (t) => timesNovos[t].jogadores.length < 6 && !timesNovos[t].jogadores.some((j) => top[item.c].includes(j));
+    const mulheres = (t) => timesNovos[t].jogadores.filter((p) => p.sexo === "F").length + (item.p.sexo === "F" ? 1 : 0);
+    let candidatos = [0, 1, 2, 3].filter((t) => vaga(t) && mulheres(t) <= alvos[t]);
+    if (!candidatos.length) candidatos = [0, 1, 2, 3].filter((t) => vaga(t));
+    if (!candidatos.length) throw new Error("Não foi possível distribuir os atletas restantes nos times.");
+    candidatos.sort((a, b) => {
+      const forcaA = timesNovos[a].jogadores.reduce((s, j) => s + forcaGlobal(j), 0);
+      const forcaB = timesNovos[b].jogadores.reduce((s, j) => s + forcaGlobal(j), 0);
+      return forcaA - forcaB || Math.random() - 0.5;
+    });
+    timesNovos[candidatos[0]].jogadores.push(item.p);
+  }
+}
+
+function excluirAtletaDoCadastro(id) {
+  const atleta = cadastroAtletas.find((a) => a.id === id);
+  if (!atleta) return;
+  // Desvincula participantes vinculados a este atleta
+  participantes.forEach((p) => {
+    if (p.cadastro_id === id || p.id === id) {
+      p.id = novoId();
+      p.cadastro_id = null;
+      p.nome = atleta.nome;
+      p.sexo = "";
+      p.nivel = null;
+      p.ranking = null;
+      p.potes_adicionais = [];
+      delete p.pote_sorteio;
+      delete p.promovido_de;
+      p.atualizado_em = new Date().toISOString();
+    }
+  });
+  // Remove o atleta do cadastro
+  cadastroAtletas.splice(cadastroAtletas.indexOf(atleta), 1);
+  salvarCadastro(); salvarParticipantesLocais();
+  renderCadastro(); renderParticipantes();
+}
+
+
+function abrirConfirmacaoExcluirCadastro(id) {
+  const atleta = cadastroAtletas.find((a) => a.id === id);
+  if (!atleta) return;
+  $("msg-excluir-cadastro").textContent = `Excluir "${atleta.nome}" do cadastro? Participantes vinculados serão desvinculados e voltarão para "pendente".`;
+  $("btn-fechar-excluir-cadastro").onclick = () => $("popup-excluir-cadastro").close();
+  $("btn-cancelar-excluir-cadastro").onclick = () => $("popup-excluir-cadastro").close();
+  $("btn-confirmar-excluir-cadastro").onclick = () => {
+    $("popup-excluir-cadastro").close();
+    excluirAtletaDoCadastro(id);
+  };
+  $("popup-excluir-cadastro").showModal();
 }
 
 $("btn-fechar-vinculo-pendente").addEventListener("click", () => $("popup-vincular-pendente").close());
@@ -1526,62 +1589,44 @@ function criarTimesComRestricoes(ativos) {
 }
 
 function montarTimesLocais() {
-  // 1. Atualiza participantes do cadastro (mantém p.nome, p.sexo, p.nivel, etc.)
+  // 1. Sincroniza nome, sexo, nível e ranking dos 24 ativos com o Cadastro
   atualizarParticipantesDoCadastro();
-  // 2. Seleciona top 4 de cada nível da lista master
-  const top = selecionarTop4PorNivel(cadastroAtletas);
-  // 3. Valida quantidade mínima (precisa de 24 atletas ativos distribuídos)
   const ativos = participantes.filter((p) => p.status === "ativo");
-  if (ativos.length < 24) throw new Error(`São necessários 24 atletas ativos. Atual: ${ativos.length}.`);
-  // 4. Pareia C1 com Levantadores (regra fixa)
-  const pares = parearC1ComLevantadores(top.C1, top.Levantadores);
-  // 5. Cria 4 times, cada um com 1 C1 + 1 Levantador + 1 M1 + 1 F1 + 1 M2 + 1 F2
-  const timesNovos = [0, 1, 2, 3].map((indice) => ({ id: novoId(), nome: `Time ${indice + 1}`, jogadores: [], nivel_medio: "0.00" }));
+  if (ativos.length !== 24) throw new Error(`São necessários 24 atletas ativos. Atual: ${ativos.length}.`);
+  const problemas = [];
+  ativos.filter((p) => !p.nivel).forEach((p) => problemas.push(`- ${p.nome}: pote principal não definido no Cadastro.`));
+  ativos.filter((p) => !p.sexo).forEach((p) => problemas.push(`- ${p.nome}: sexo não definido no Cadastro.`));
+  if (problemas.length) throw new Error(`Não foi possível sortear os times.\n${problemas.join("\n")}`);
 
-  // Distribui os pares C1+Levantador (já fixos)
-  pares.forEach((par, i) => {
-    timesNovos[i].jogadores.push(par.c1, par.levantador);
+  // 2. Seleciona top 4 de cada nível a partir dos 24 ativos da aba Lista
+  const top = selecionarTop4PorNivel(ativos);
+  // 3. Pareia C1 com Levantadores (regra fixa)
+  const pares = parearC1ComLevantadores(top.C1, top.Levantadores);
+  if (pares.some((par) => !par.c1 || !par.levantador)) {
+    throw new Error("Não há C1 e Levantadores suficientes na lista para o pareamento fixo.");
+  }
+  // 4. Cria 4 times com 1 C1 + 1 Levantador fixos
+  const timesNovos = [0, 1, 2, 3].map((indice) => ({ id: novoId(), nome: `Time ${indice + 1}`, jogadores: [], nivel_medio: "0.00" }));
+  pares.forEach((par, i) => timesNovos[i].jogadores.push(par.c1, par.levantador));
+  // 5. Distribui M1, F1, M2 e F2 equilibrando mulheres e força por time
+  distribuirRestantes(top, timesNovos);
+
+  // 6. Registra o pote de sorteio em cada atleta para exibição e desfazer
+  Object.entries(top).forEach(([categoria, lista]) => {
+    lista.forEach((p) => {
+      p.pote_sorteio = categoria === "Levantadores" ? "levantadores" : categoria;
+      p.promovido_de = p.nivel && p.nivel !== p.pote_sorteio &&
+        !((p.nivel === "LM1" || p.nivel === "LF1") && p.pote_sorteio === "levantadores") ? p.nivel : null;
+    });
   });
 
-  // Agora distribui os restantes: M1, F1, M2, F2 (1 de cada por time = 4×4=16 atletas)
-  // Já temos 8 atletas distribuídos (4 C1 + 4 Levantadores). Restam 16 vagas.
-  // Precisamos de: 4 M1 + 4 F1 + 4 M2 + 4 F2 = 16 exactly
-  const restantesM1 = top.M1.filter((_, i) => i < 4);
-  const restantesF1 = top.F1.filter((_, i) => i < 4);
-  const restantesM2 = top.M2.filter((_, i) => i < 4);
-  const restantesF2 = top.F2.filter((_, i) => i < 4);
-
-  // Distribui garantindo equilíbrio de mulheres por time
-  // Cada time já terá: 1 C1 + 1 Lev + 1 M1 + 1 F1 + 1 M2 + 1 F2 = 6 jogadores
-  for (let t = 0; t < 4; t++) {
-    timesNovos[t].jogadores.push(restantesM1[t], restantesF1[t], restantesM2[t], restantesF2[t]);
-  }
-
-  // Ordena jogadores por ranking dentro de cada time (mais forte primeiro)
+  // 7. Ordena jogadores por força e calcula a média
   timesNovos.forEach((time) => {
-    time.jogadores.sort((a, b) => (b.ranking || 0) - (a.ranking || 0));
+    time.jogadores.sort((a, b) => (a.ranking || 999) - (b.ranking || 999));
     time.nivel_medio = (time.jogadores.reduce((sum, p) => sum + (p.ranking || 0), 0) / 6).toFixed(2);
   });
-
-  // Nomeia o time pelo primeiro C1 (se existir)
-  timesNovos.forEach((time) => {
-    const c1 = time.jogadores.find((j) => j.pote === "C1" || j.nivel === "C1");
-    if (c1?.nome) time.nome = `Time ${c1.nome}`;
-    else if (!time.nome || /^Time \d+$/.test(time.nome)) time.nome = `Time ${timesNovos.indexOf(time) + 1}`;
-  });
-
-  // Registra o pote_sorteio em cada participante (para compatibilidade com renderizar/undo)
-  ativos.forEach((p) => {
-    const time = timesNovos.find((t) => t.jogadores.some((j) => j.id === p.id || j.nome === p.nome));
-    if (time) {
-      p.pote_sorteio = time.jogadores.find((j) => j.id === p.id || j.nome === p.nome) ? time.jogadores.find((j) => j.id === p.id || j.nome === p.nome).pote_sorteio : null;
-    }
-  });
-
-  salvarUltimoSorteio();
-  salvarTimesLocais();
-  reiniciarPresenca();
-  renderPontos();
+  nomearTimesPorC1(timesNovos);
+  salvarParticipantesLocais();
   return timesNovos;
 }
 
