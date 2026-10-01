@@ -354,7 +354,7 @@ function renderCadastro() {
     item.dataset.cadastroId = atleta.id;
     const opcoes = NIVEIS.map((pote) => `<option value="${pote}" ${atleta.pote === pote ? "selected" : ""}>${pote}</option>`).join("");
     const adicionais = NIVEIS.filter((pote) => pote !== atleta.pote).map((pote) => `<label><input type="checkbox" data-pote-adicional="${pote}" ${atleta.potesAdicionais.includes(pote) ? "checked" : ""} />${pote}</label>`).join("");
-    item.innerHTML = `<div class="cabecalho-cadastro"><span>${indice + 1}. <input data-cadastro-nome value="${esc(atleta.nome)}" maxlength="80" /></span><span>Arraste</span><button class="btn-excluir-cadastro" data-excluir-cadastro="${atleta.id}" title="Excluir atleta">🗑️</button></div><div class="linha"><select data-cadastro-sexo><option value="" ${!atleta.sexo ? "selected" : ""}>Sexo</option><option value="F" ${atleta.sexo === "F" ? "selected" : ""}>F</option><option value="M" ${atleta.sexo === "M" ? "selected" : ""}>M</option></select><select data-cadastro-pote><option value="">Pote principal</option>${opcoes}</select></div><div class="det-cadastro">Pote principal: ${atleta.pote || "não definido"} · Também atua em: ${atleta.potesAdicionais.length ? atleta.potesAdicionais.join(", ") : "nenhum"}</div><div class="det-cadastro">Nomes vinculados: ${atleta.aliases.length ? atleta.aliases.map(esc).join(", ") : "nenhum"}</div><div class="potes-adicionais"><span class="det-cadastro">Permissões:</span>${adicionais}</div>`;
+    item.innerHTML = `<div class="cabecalho-cadastro"><span class="nome-cabecalho-cadastro">${indice + 1}. <input data-cadastro-nome value="${esc(atleta.nome)}" maxlength="80" /></span><span class="acoes-cabecalho-cadastro"><span class="dica-arraste">Arraste</span><button class="btn-excluir-cadastro" data-excluir-cadastro="${atleta.id}" title="Excluir atleta" aria-label="Excluir ${esc(atleta.nome)}">🗑️</button></span></div><div class="linha"><select data-cadastro-sexo><option value="" ${!atleta.sexo ? "selected" : ""}>Sexo</option><option value="F" ${atleta.sexo === "F" ? "selected" : ""}>F</option><option value="M" ${atleta.sexo === "M" ? "selected" : ""}>M</option></select><select data-cadastro-pote><option value="">Pote principal</option>${opcoes}</select></div><div class="det-cadastro">Pote principal: ${atleta.pote || "não definido"} · Também atua em: ${atleta.potesAdicionais.length ? atleta.potesAdicionais.join(", ") : "nenhum"}</div><div class="det-cadastro">Nomes vinculados: ${atleta.aliases.length ? atleta.aliases.map(esc).join(", ") : "nenhum"}</div><div class="potes-adicionais"><span class="det-cadastro">Permissões:</span>${adicionais}</div>`;
     lista.appendChild(item);
   });
   lista.querySelectorAll("[data-cadastro-nome]").forEach((input) => input.addEventListener("change", () => atualizarCadastro(input.closest("[data-cadastro-id]").dataset.cadastroId, { nome: input.value.trim() })));
@@ -365,6 +365,7 @@ function renderCadastro() {
     atleta.potesAdicionais = NIVEIS.filter((pote) => pote !== atleta.pote && input.closest("[data-cadastro-id]").querySelector(`[data-pote-adicional="${pote}"]`)?.checked);
     salvarCadastro(); renderCadastro();
   }));
+  lista.querySelectorAll("[data-excluir-cadastro]").forEach((botao) => botao.addEventListener("click", () => abrirConfirmacaoExcluirCadastro(botao.dataset.excluirCadastro)));
   configurarArrasteCadastro(lista);
 }
 
@@ -379,18 +380,6 @@ document.querySelectorAll("[data-cadastro-sexo]").forEach((botao) => botao.addEv
   document.querySelectorAll("[data-cadastro-sexo]").forEach((item) => item.classList.toggle("ativo", item === botao));
   renderCadastro();
 }));
-
-document.querySelectorAll("[data-excluir-cadastro]").forEach((botao) => {
-  botao.addEventListener("click", () => {
-    const id = botao.dataset.excluirCadastro;
-    const atleta = cadastroAtletas.find((a) => a.id === id);
-    if (!atleta) return;
-    const confirmar = confirm(`Excluir "${atleta.nome}" do cadastro? Participantes vinculados serão desvinculados e voltarão para "pendente".`);
-    if (confirmar) {
-      excluirAtletaDoCadastro(id);
-    }
-  });
-});
 
 function atualizarCadastro(id, alteracoes) {
   const atleta = cadastroAtletas.find((item) => item.id === id);
@@ -552,46 +541,143 @@ function selecionarTop4PorNivel(ativos) {
   return selecionados;
 }
 
-function parearC1ComLevantadores(topC1, topLevantadores) {
-  // topC1 e topLevantadores já ordenados por ranking (1 = mais forte)
-  // Pareamento fixo:
-  // 1º C1 + 4º Levantador
-  // 2º C1 + 3º Levantador
-  // 3º C1 + 2º Levantador
-  // 4º C1 + 1º Levantador
-  const pares = [
-    { c1: topC1[0], levantador: topLevantadores[3] },
-    { c1: topC1[1], levantador: topLevantadores[2] },
-    { c1: topC1[2], levantador: topLevantadores[1] },
-    { c1: topC1[3], levantador: topLevantadores[0] },
-  ];
-  return pares;
+function categoriaNucleo(p) {
+  return (p.nivel === "LM1" || p.nivel === "LF1") ? "Levantadores" : p.nivel;
+}
+
+function posicionarCasais(top, timesNovos) {
+  // Casais ativos são sempre mantidos no mesmo time, mesmo nivelando as regras.
+  const selecionados = [...top.C1, ...top.Levantadores, ...top.M1, ...top.F1, ...top.M2, ...top.F2];
+  const porNome = new Map(selecionados.map((p) => [normalizarNome(p.nome), p]));
+  const usados = new Set();
+  const unidades = [];
+  const ausentes = [];
+  casaisConfigurados.forEach((casal, indice) => {
+    if (!casaisAtivos[indice]) return;
+    const primeiro = porNome.get(normalizarNome(casal[0]));
+    const segundo = porNome.get(normalizarNome(casal[1]));
+    if (!primeiro || !segundo) { ausentes.push(`${casal[0]} e ${casal[1]}`); return; }
+    if (usados.has(primeiro.id) || usados.has(segundo.id)) return;
+    unidades.push([primeiro, segundo]);
+    usados.add(primeiro.id);
+    usados.add(segundo.id);
+  });
+  for (const unidade of unidades) {
+    const contagens = {};
+    unidade.forEach((p) => { const c = categoriaNucleo(p); contagens[c] = (contagens[c] || 0) + 1; });
+    // Casal vence regras: casal do mesmo nível ocupa as duas vagas da categoria em um time.
+    // Reserva 2 vagas para o núcleo de nivelamento (1 C1 + 1 Levantador).
+    const valido = (t) => timesNovos[t].jogadores.length + unidade.length <= 4 &&
+      Object.entries(contagens).every(([c]) => timesNovos[t].jogadores.every((j) => categoriaNucleo(j) !== c));
+    const escolhido = [0, 1, 2, 3].sort(() => Math.random() - 0.5).find(valido);
+    if (escolhido === undefined) {
+      throw new Error("Não foi possível encaixar todos os casais nos times. Desative algum casal ou revise os potes.");
+    }
+    timesNovos[escolhido].jogadores.push(...unidade);
+  }
+  return { ausentes, usados };
+}
+
+function preencherNucleoC1Lev(top, timesNovos, usados = new Set()) {
+  // Nivelamento: pareamento de opostos (1º C1 + 4º Levantador, 2º + 3º, ...).
+  // Com casais, completa o núcleo de cada time mantendo a regra entre os restantes.
+  const rank = (p) => p.ranking || 999;
+  const c1 = top.C1.filter((p) => !usados.has(p.id)).sort((a, b) => rank(a) - rank(b));
+  const lev = top.Levantadores.filter((p) => !usados.has(p.id)).sort((a, b) => rank(b) - rank(a));
+  const nucleo = (t, categoria) => timesNovos[t].jogadores.find((j) => categoriaNucleo(j) === categoria);
+
+  // Times com Levantador do casal recebem o C1 oposto (melhor Lev → pior C1)
+  [0, 1, 2, 3].filter((t) => !nucleo(t, "C1") && nucleo(t, "Levantadores"))
+    .sort((x, y) => rank(nucleo(x, "Levantadores")) - rank(nucleo(y, "Levantadores")))
+    .forEach((t) => {
+      const escolhido = c1.pop();
+      if (escolhido) timesNovos[t].jogadores.push(escolhido);
+    });
+
+  // Times com C1 do casal recebem o Levantador oposto (melhor C1 → pior Lev)
+  [0, 1, 2, 3].filter((t) => nucleo(t, "C1") && !nucleo(t, "Levantadores"))
+    .sort((x, y) => rank(nucleo(x, "C1")) - rank(nucleo(y, "C1")))
+    .forEach((t) => {
+      const escolhido = lev.shift();
+      if (escolhido) timesNovos[t].jogadores.push(escolhido);
+    });
+
+  // Times sem C1 e sem Levantador: pareamento fixo de opostos, destino sorteado
+  [0, 1, 2, 3].filter((t) => !nucleo(t, "C1") && !nucleo(t, "Levantadores"))
+    .sort(() => Math.random() - 0.5)
+    .forEach((t) => {
+      if (!c1.length || !lev.length) return;
+      const parC1 = c1.shift();
+      const parLev = lev.shift();
+      timesNovos[t].jogadores.push(parC1, parLev);
+    });
+
+  // Sobras (ex.: casal do mesmo nível de C1 ou Levantador): coloca em times com vaga
+  while (c1.length || lev.length) {
+    const p = c1.length ? c1.pop() : lev.shift();
+    const escolhido = [0, 1, 2, 3]
+      .filter((t) => timesNovos[t].jogadores.length < 6)
+      .sort((a, b) => timesNovos[a].jogadores.length - timesNovos[b].jogadores.length || Math.random() - 0.5)[0];
+    if (escolhido === undefined) break;
+    timesNovos[escolhido].jogadores.push(p);
+  }
 }
 
 function distribuirRestantes(top, timesNovos) {
-  // Distribui M1, F1, M2 e F2: 1 de cada por time, equilibrando mulheres e força
-  const forcaGlobal = (p) => 25 - (p.ranking || 24);
+  // Sorteia M1, F1, M2 e F2: 1 de cada por time, mulheres equilibradas.
+  // Somente C1 e Levantadores são fixados (nivelamento); o resto é aleatório.
+  // Usa backtracking: com casais, algumas categorias só têm times elegíveis
+  // limitados e a ordem gulosa pode esgotar as vagas antes do fim.
+  const embaralhar = (itens) => [...itens].sort(() => Math.random() - 0.5);
   const categorias = ["M1", "F1", "M2", "F2"];
-  const pendentes = categorias.flatMap((c) => top[c].map((p) => ({ p, c })));
-  pendentes.sort((a, b) => forcaGlobal(b.p) - forcaGlobal(a.p));
+  // Exclui atletas já posicionados por casais ou pelo núcleo C1+Levantador
+  const pendentes = embaralhar(categorias.flatMap((c) => top[c].map((p) => ({ p, c }))))
+    .filter((item) => !timesNovos.some((t) => t.jogadores.includes(item.p)));
   const totalMulheres = pendentes.filter((i) => i.p.sexo === "F").length +
     timesNovos.reduce((s, t) => s + t.jogadores.filter((p) => p.sexo === "F").length, 0);
-  const alvos = Array(4).fill(Math.floor(totalMulheres / 4));
+  const base = Math.floor(totalMulheres / 4);
   const resto = totalMulheres % 4;
-  [0, 1, 2, 3].sort(() => Math.random() - 0.5).slice(0, resto).forEach((t) => { alvos[t] += 1; });
 
-  for (const item of pendentes) {
-    const vaga = (t) => timesNovos[t].jogadores.length < 6 && !timesNovos[t].jogadores.some((j) => top[item.c].includes(j));
-    const mulheres = (t) => timesNovos[t].jogadores.filter((p) => p.sexo === "F").length + (item.p.sexo === "F" ? 1 : 0);
-    let candidatos = [0, 1, 2, 3].filter((t) => vaga(t) && mulheres(t) <= alvos[t]);
-    if (!candidatos.length) candidatos = [0, 1, 2, 3].filter((t) => vaga(t));
-    if (!candidatos.length) throw new Error("Não foi possível distribuir os atletas restantes nos times.");
-    candidatos.sort((a, b) => {
-      const forcaA = timesNovos[a].jogadores.reduce((s, j) => s + forcaGlobal(j), 0);
-      const forcaB = timesNovos[b].jogadores.reduce((s, j) => s + forcaGlobal(j), 0);
-      return forcaA - forcaB || Math.random() - 0.5;
-    });
-    timesNovos[candidatos[0]].jogadores.push(item.p);
+  const tentar = (alvos, equilibrarMulheres, flexivel) => {
+    let tentativas = 0;
+    // A composição exige 1 de cada nível por time; M2 e F2 admitem 1 ou 2,
+    // o que permite fechar times quando casais do mesmo nível deslocam vagas.
+    const limite = (c) => flexivel && (c === "M2" || c === "F2") ? 2 : 1;
+    const colocar = (indice) => {
+      if (indice === pendentes.length) return true;
+      if (++tentativas > 200000) return false;
+      const item = pendentes[indice];
+      const vaga = (t) => timesNovos[t].jogadores.length < 6 &&
+        timesNovos[t].jogadores.filter((j) => top[item.c].includes(j)).length < limite(item.c);
+      const mulheres = (t) => timesNovos[t].jogadores.filter((p) => p.sexo === "F").length + (item.p.sexo === "F" ? 1 : 0);
+      let candidatos = [0, 1, 2, 3].filter((t) => vaga(t) && (!equilibrarMulheres || mulheres(t) <= alvos[t]));
+      if (!candidatos.length && equilibrarMulheres) candidatos = [0, 1, 2, 3].filter((t) => vaga(t));
+      for (const t of embaralhar(candidatos)) {
+        timesNovos[t].jogadores.push(item.p);
+        if (colocar(indice + 1)) return true;
+        timesNovos[t].jogadores.pop();
+      }
+      return false;
+    };
+    return colocar(0);
+  };
+
+  // Prioriza composição estrita e equilíbrio de mulheres; flexibiliza M2/F2
+  // (necessário com casais do mesmo nível) e por fim relaxa o equilíbrio.
+  const combinacoes = [];
+  for (let mascara = 0; mascara < 16; mascara++) {
+    const times = [0, 1, 2, 3].filter((t) => mascara & (1 << t));
+    if (times.length === resto) combinacoes.push(times);
+  }
+  for (const flexivel of [false, true]) {
+    for (const combo of embaralhar(combinacoes)) {
+      const alvos = Array(4).fill(base);
+      combo.forEach((t) => { alvos[t] += 1; });
+      if (tentar(alvos, true, flexivel)) return;
+    }
+  }
+  if (!tentar(Array(4).fill(base + 1), false, false) && !tentar(Array(4).fill(base + 1), false, true)) {
+    throw new Error("Não foi possível distribuir os atletas restantes nos times.");
   }
 }
 
@@ -599,6 +685,7 @@ function excluirAtletaDoCadastro(id) {
   const atleta = cadastroAtletas.find((a) => a.id === id);
   if (!atleta) return;
   // Desvincula participantes vinculados a este atleta
+  let desvinculados = 0;
   participantes.forEach((p) => {
     if (p.cadastro_id === id || p.id === id) {
       p.id = novoId();
@@ -611,11 +698,13 @@ function excluirAtletaDoCadastro(id) {
       delete p.pote_sorteio;
       delete p.promovido_de;
       p.atualizado_em = new Date().toISOString();
+      desvinculados += 1;
     }
   });
   // Remove o atleta do cadastro
   cadastroAtletas.splice(cadastroAtletas.indexOf(atleta), 1);
   salvarCadastro(); salvarParticipantesLocais();
+  if (desvinculados) limparTimesPresencaEPontos();
   renderCadastro(); renderParticipantes();
 }
 
@@ -927,6 +1016,24 @@ $("btn-compartilhar").addEventListener("click", async () => {
     // A abertura do WhatsApp continua disponível mesmo sem clipboard/share.
   }
   window.open(`https://wa.me/?text=${encodeURIComponent(mensagem)}`, "_blank");
+});
+
+$("btn-copiar-lista").addEventListener("click", async () => {
+  const ativos = participantes.filter((p) => p.status === "ativo");
+  if (!ativos.length) {
+    alert("Não há participantes para copiar.");
+    return;
+  }
+  const texto = ativos.map((p, i) => `${i + 1}. ${p.nome}`).join("\n");
+  try {
+    await navigator.clipboard.writeText(texto);
+    $("msg-importar").textContent = "Lista copiada. Cole no campo de importação para recarregar este time.";
+    $("msg-importar").className = "msg";
+  } catch {
+    $("whatsapp-texto").value = texto;
+    $("msg-importar").textContent = "Clipboard indisponível: copie manualmente o texto colado no campo de importação.";
+    $("msg-importar").className = "msg";
+  }
 });
 
 $("btn-atualizar-lista").addEventListener("click", () => executarComProgresso("Atualizando lista", async (etapa) => {
@@ -1600,18 +1707,54 @@ function montarTimesLocais() {
 
   // 2. Seleciona top 4 de cada nível a partir dos 24 ativos da aba Lista
   const top = selecionarTop4PorNivel(ativos);
-  // 3. Pareia C1 com Levantadores (regra fixa)
-  const pares = parearC1ComLevantadores(top.C1, top.Levantadores);
-  if (pares.some((par) => !par.c1 || !par.levantador)) {
-    throw new Error("Não há C1 e Levantadores suficientes na lista para o pareamento fixo.");
-  }
-  // 4. Cria 4 times com 1 C1 + 1 Levantador fixos
-  const timesNovos = [0, 1, 2, 3].map((indice) => ({ id: novoId(), nome: `Time ${indice + 1}`, jogadores: [], nivel_medio: "0.00" }));
-  pares.forEach((par, i) => timesNovos[i].jogadores.push(par.c1, par.levantador));
-  // 5. Distribui M1, F1, M2 e F2 equilibrando mulheres e força por time
-  distribuirRestantes(top, timesNovos);
 
-  // 6. Registra o pote de sorteio em cada atleta para exibição e desfazer
+  // 3. Sorteia em tentativas: casais podem cair em posições inviáveis ou
+  //    desequilibrar as mulheres, então reembaralha até fechar os times
+  //    com equilíbrio; guarda a melhor tentativa como alternativa.
+  let ausentes = [];
+  let timesNovos = null;
+  let alternativa = null;
+  let ultimoErro = null;
+  for (let tentativa = 0; tentativa < 100 && !timesNovos; tentativa++) {
+    const timesTentativa = [0, 1, 2, 3].map((indice) => ({ id: novoId(), nome: `Time ${indice + 1}`, jogadores: [], nivel_medio: "0.00" }));
+    try {
+      // Casais ativos: sempre juntos no mesmo time
+      let usados = new Set();
+      let ausentesT = [];
+      if (sorteioComCasais) ({ ausentes: ausentesT, usados } = posicionarCasais(top, timesTentativa));
+      // Nivelamento fixo: 1 C1 + 1 Levantador por time, pareando opostos
+      preencherNucleoC1Lev(top, timesTentativa, usados);
+      // Viabilidade rápida: restantes de cada categoria precisam de vagas
+      if (!["M1", "F1", "M2", "F2"].every((c) => {
+        const limite = (c === "M2" || c === "F2") ? 2 : 1;
+        const restantes = top[c].filter((p) => !timesTentativa.some((t) => t.jogadores.includes(p))).length;
+        const vagas = timesTentativa.reduce((s, t) =>
+          s + Math.min(limite - t.jogadores.filter((j) => top[c].includes(j)).length, 6 - t.jogadores.length), 0);
+        return restantes <= vagas;
+      })) throw new Error("Posicionamento dos casais esgotou as vagas de uma categoria.");
+      // Sorteia M1, F1, M2 e F2: 1 de cada por time, priorizando o equilíbrio
+      distribuirRestantes(top, timesTentativa);
+      const variancia = (lista) => {
+        const mulheresPorTime = lista.map((t) => t.jogadores.filter((p) => p.sexo === "F").length);
+        return Math.max(...mulheresPorTime) - Math.min(...mulheresPorTime);
+      };
+      if (variancia(timesTentativa) <= 1) {
+        timesNovos = timesTentativa;
+        ausentes = ausentesT;
+      } else if (!alternativa || variancia(timesTentativa) < variancia(alternativa)) {
+        alternativa = timesTentativa;
+        ausentes = ausentesT;
+      }
+    } catch (e) {
+      ultimoErro = e;
+    }
+  }
+  if (!timesNovos) timesNovos = alternativa;
+  if (!timesNovos) {
+    throw ultimoErro || new Error("Não foi possível sortear os times. Desative algum casal ou revise os potes.");
+  }
+
+  // 4. Registra o pote de sorteio em cada atleta para exibição e desfazer
   Object.entries(top).forEach(([categoria, lista]) => {
     lista.forEach((p) => {
       p.pote_sorteio = categoria === "Levantadores" ? "levantadores" : categoria;
@@ -1620,13 +1763,17 @@ function montarTimesLocais() {
     });
   });
 
-  // 7. Ordena jogadores por força e calcula a média
+  // 5. Valida, ordena jogadores por força e calcula a média
   timesNovos.forEach((time) => {
+    if (time.jogadores.length !== 6) throw new Error(`Time incompleto: ${time.jogadores.length} de 6 jogadores.`);
     time.jogadores.sort((a, b) => (a.ranking || 999) - (b.ranking || 999));
     time.nivel_medio = (time.jogadores.reduce((sum, p) => sum + (p.ranking || 0), 0) / 6).toFixed(2);
   });
   nomearTimesPorC1(timesNovos);
   salvarParticipantesLocais();
+  $("msg-casais").textContent = ausentes.length
+    ? `Casais não encontrados: ${ausentes.join(", ")}.`
+    : (sorteioComCasais ? "Casais ativos permanecem no mesmo time." : "");
   return timesNovos;
 }
 
