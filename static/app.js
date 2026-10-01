@@ -508,6 +508,68 @@ function atualizarNomeParticipante(participante, nome) {
   salvarParticipantesLocais();
 }
 
+function selecionarTop4PorNivel(cadastroAtletas) {
+  // Agrupa por nível principal (pote) mantendo a ordem já existente (mais forte → mais fraco)
+  const agrupar = (chave) => cadastroAtletas.filter((a) => a.pote === chave);
+  const topC1 = agrupar("C1").slice(0, 4);
+  const topLM1 = agrupar("LM1").slice(0, 4);
+  const topLF1 = agrupar("LF1").slice(0, 4);
+  const topM1 = agrupar("M1").slice(0, 4);
+  const topF1 = agrupar("F1").slice(0, 4);
+  const topM2 = agrupar("M2").slice(0, 4);
+  const topF2 = agrupar("F2").slice(0, 4);
+
+  // Completa com próximo da prioridade se faltar: C1 → Levantadores → M1 → F1 → M2 → F2
+  const prioridade = ["C1", "Levantadores", "M1", "F1", "M2", "F2"];
+  const totalNecessario = 24; // 4 times × 6 jogadores
+  const totalDisponivel = topC1.length + topLM1.length + topLF1.length + topM1.length + topF1.length + topM2.length + topF2.length;
+  let faltando = totalNecessario - totalDisponivel;
+
+  let levantadores = [];
+  if (faltando > 0) {
+    // Combina LM1 + LF1 como "Levantadores"
+    levantadores = [...topLM1, ...topLF1];
+    faltando -= levantadores.length;
+  } else {
+    levantadores = [...topLM1, ...topLF1].slice(0, 4);
+  }
+
+  // Se ainda faltar, completa conforme prioridade a partir do que já está disponível
+  const poolExtra = [];
+  for (const nivel of prioridade) {
+    if (faltando <= 0) break;
+    const existentes = agrupar(nivel).slice(4); // já pegamos top 4 acima
+    const quantidade = Math.min(faltando, existentes.length);
+    poolExtra.push(...existentes.slice(0, quantidade));
+    faltando -= quantidade;
+  }
+
+  return {
+    C1: topC1.length >= 4 ? topC1 : [...topC1, ...poolExtra.filter((a) => a.pote === "C1")],
+    Levantadores: levantadores.length >= 4 ? levantadores.slice(0, 4) : levantadores,
+    M1: topM1.length >= 4 ? topM1 : [...topM1, ...poolExtra.filter((a) => a.pote === "M1")],
+    F1: topF1.length >= 4 ? topF1 : [...topF1, ...poolExtra.filter((a) => a.pote === "F1")],
+    M2: topM2.length >= 4 ? topM2 : [...topM2, ...poolExtra.filter((a) => a.pote === "M2")],
+    F2: topF2.length >= 4 ? topF2 : [...topF2, ...poolExtra.filter((a) => a.pote === "F2")],
+  };
+}
+
+function parearC1ComLevantadores(topC1, topLevantadores) {
+  // topC1 e topLevantadores já ordenados por ranking (1 = mais forte)
+  // Pareamento fixo:
+  // 1º C1 + 4º Levantador
+  // 2º C1 + 3º Levantador
+  // 3º C1 + 2º Levantador
+  // 4º C1 + 1º Levantador
+  const pares = [
+    { c1: topC1[0], levantador: topLevantadores[3] },
+    { c1: topC1[1], levantador: topLevantadores[2] },
+    { c1: topC1[2], levantador: topLevantadores[1] },
+    { c1: topC1[3], levantador: topLevantadores[0] },
+  ];
+  return pares;
+}
+
 $("btn-fechar-vinculo-pendente").addEventListener("click", () => $("popup-vincular-pendente").close());
 $("busca-vinculo-pendente").addEventListener("input", () => {
   renderResultadosCadastro($("resultados-vinculo-pendente"), buscarCadastro($("busca-vinculo-pendente").value), (atleta) => {
@@ -1464,32 +1526,63 @@ function criarTimesComRestricoes(ativos) {
 }
 
 function montarTimesLocais() {
+  // 1. Atualiza participantes do cadastro (mantém p.nome, p.sexo, p.nivel, etc.)
   atualizarParticipantesDoCadastro();
+  // 2. Seleciona top 4 de cada nível da lista master
+  const top = selecionarTop4PorNivel(cadastroAtletas);
+  // 3. Valida quantidade mínima (precisa de 24 atletas ativos distribuídos)
   const ativos = participantes.filter((p) => p.status === "ativo");
-  const problemas = [];
-  if (ativos.length !== 24) problemas.push(`- Atletas ativos: ${ativos.length}; são necessários 24.`);
-  const cadastroPorId = new Map(cadastroAtletas.map((atleta, indice) => [atleta.id, { atleta, indice }]));
-  ativos.forEach((p) => {
-    const registro = cadastroPorId.get(p.id);
-    if (!registro) { problemas.push(`- ${p.nome}: atleta não cadastrado.`); return; }
-    p.nome = registro.atleta.nome;
-    p.sexo = registro.atleta.sexo;
-    p.nivel = registro.atleta.pote || null;
-    p.potes_adicionais = registro.atleta.potesAdicionais;
-    p.ranking = registro.indice + 1;
-  });
-  ativos.filter((p) => !p.nivel).forEach((p) => problemas.push(`- ${p.nome}: pote principal não definido no Cadastro.`));
-  ativos.filter((p) => !p.sexo).forEach((p) => problemas.push(`- ${p.nome}: sexo não definido no Cadastro.`));
-  if (problemas.length) throw new Error(`Não foi possível sortear os times.\n${problemas.join("\n")}`);
+  if (ativos.length < 24) throw new Error(`São necessários 24 atletas ativos. Atual: ${ativos.length}.`);
+  // 4. Pareia C1 com Levantadores (regra fixa)
+  const pares = parearC1ComLevantadores(top.C1, top.Levantadores);
+  // 5. Cria 4 times, cada um com 1 C1 + 1 Levantador + 1 M1 + 1 F1 + 1 M2 + 1 F2
+  const timesNovos = [0, 1, 2, 3].map((indice) => ({ id: novoId(), nome: `Time ${indice + 1}`, jogadores: [], nivel_medio: "0.00" }));
 
-  const atribuicoes = calcularAtribuicaoPotes(ativos);
-  ativos.forEach((p) => {
-    p.pote_sorteio = atribuicoes.get(p.id);
-    p.promovido_de = p.pote_sorteio === p.nivel || (p.nivel === "M2" && p.pote_sorteio === "M2F2") || ((p.nivel === "LM1" || p.nivel === "LF1") && p.pote_sorteio === "levantadores") ? null : p.nivel;
+  // Distribui os pares C1+Levantador (já fixos)
+  pares.forEach((par, i) => {
+    timesNovos[i].jogadores.push(par.c1, par.levantador);
   });
-  const resultado = criarTimesComRestricoes(ativos);
-  $("msg-casais").textContent = resultado.ausentes.length ? `Casais não encontrados: ${resultado.ausentes.join(", ")}.` : (sorteioComCasais ? "Casais ativos permanecem no mesmo time." : "");
-  return resultado.times;
+
+  // Agora distribui os restantes: M1, F1, M2, F2 (1 de cada por time = 4×4=16 atletas)
+  // Já temos 8 atletas distribuídos (4 C1 + 4 Levantadores). Restam 16 vagas.
+  // Precisamos de: 4 M1 + 4 F1 + 4 M2 + 4 F2 = 16 exactly
+  const restantesM1 = top.M1.filter((_, i) => i < 4);
+  const restantesF1 = top.F1.filter((_, i) => i < 4);
+  const restantesM2 = top.M2.filter((_, i) => i < 4);
+  const restantesF2 = top.F2.filter((_, i) => i < 4);
+
+  // Distribui garantindo equilíbrio de mulheres por time
+  // Cada time já terá: 1 C1 + 1 Lev + 1 M1 + 1 F1 + 1 M2 + 1 F2 = 6 jogadores
+  for (let t = 0; t < 4; t++) {
+    timesNovos[t].jogadores.push(restantesM1[t], restantesF1[t], restantesM2[t], restantesF2[t]);
+  }
+
+  // Ordena jogadores por ranking dentro de cada time (mais forte primeiro)
+  timesNovos.forEach((time) => {
+    time.jogadores.sort((a, b) => (b.ranking || 0) - (a.ranking || 0));
+    time.nivel_medio = (time.jogadores.reduce((sum, p) => sum + (p.ranking || 0), 0) / 6).toFixed(2);
+  });
+
+  // Nomeia o time pelo primeiro C1 (se existir)
+  timesNovos.forEach((time) => {
+    const c1 = time.jogadores.find((j) => j.pote === "C1" || j.nivel === "C1");
+    if (c1?.nome) time.nome = `Time ${c1.nome}`;
+    else if (!time.nome || /^Time \d+$/.test(time.nome)) time.nome = `Time ${timesNovos.indexOf(time) + 1}`;
+  });
+
+  // Registra o pote_sorteio em cada participante (para compatibilidade com renderizar/undo)
+  ativos.forEach((p) => {
+    const time = timesNovos.find((t) => t.jogadores.some((j) => j.id === p.id || j.nome === p.nome));
+    if (time) {
+      p.pote_sorteio = time.jogadores.find((j) => j.id === p.id || j.nome === p.nome) ? time.jogadores.find((j) => j.id === p.id || j.nome === p.nome).pote_sorteio : null;
+    }
+  });
+
+  salvarUltimoSorteio();
+  salvarTimesLocais();
+  reiniciarPresenca();
+  renderPontos();
+  return timesNovos;
 }
 
 $("btn-montar").addEventListener("click", async () => {
