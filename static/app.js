@@ -62,6 +62,32 @@ function extrairTitulares(texto) {
   return titulares.slice(0, 24);
 }
 
+// Função: extrair os times da mensagem gerada pelo "Compartilhar times".
+// Seções em negrito do WhatsApp (*Nome*) ou texto plano, seguidas de jogadores numerados.
+// Apenas seções cujo nome começa com "Time" são reconhecidas (\b impede o título
+// geral "Times"), para não confundir com a lista de participantes (C1, M1, ...).
+function extrairTimes(texto) {
+  const linhas = texto.split("\n");
+  const times = [];
+  let atual = null;
+  for (const linha of linhas) {
+    const t = linha.trim();
+    const m = t.match(/^\d+\.\s*(.+?)(?:\s*✅)?$/);
+    if (m) {
+      const nome = m[1].trim().replace(/\s*[✅☑][\uFE0E\uFE0F]?\s*$/, "");
+      if (nome && atual) atual.jogadores.push(nome);
+      continue;
+    }
+    const negrito = t.match(/^\*(.+?)\*$/);
+    const cabecalho = (negrito ? negrito[1] : t).trim();
+    if (cabecalho && /^time\b/i.test(cabecalho)) {
+      atual = { nome: cabecalho, jogadores: [] };
+      times.push(atual);
+    }
+  }
+  return times.filter((time) => time.jogadores.length);
+}
+
 // ---- Navegação entre telas -------------------------------------------
 document.querySelectorAll(".aba").forEach((btn) => {
   btn.addEventListener("click", () => {
@@ -1845,7 +1871,10 @@ async function atualizarDados() {
       `<div class="preview-item">${i + 1}. ${esc(n)}</div>`).join("");
     $("preview-importar").style.display = "block";
     $("btn-confirmar-importar").style.display = "inline-block";
-    $("msg-importar").textContent = `${nomes.length} titulares encontrados.`;
+    const timesMensagem = extrairTimes(texto);
+    $("msg-importar").textContent = timesMensagem.length >= 2
+      ? `${nomes.length} titulares e ${timesMensagem.length} times encontrados. Os times serão restaurados ao confirmar.`
+      : `${nomes.length} titulares encontrados.`;
     $("msg-importar").className = "msg";
   });
 
@@ -1882,8 +1911,30 @@ async function atualizarDados() {
         atualizado_em: new Date().toISOString(),
       }));
       salvarParticipantesLocais();
+      // Mensagem do "Compartilhar times": restaura os times gerados e salvos
+      const timesMensagem = extrairTimes(texto);
+      let restaurados = 0;
+      if (timesMensagem.length >= 2) {
+        times = timesMensagem.map((timeMsg) => {
+          const jogadores = timeMsg.jogadores
+            .map((nome) => participantes.find((p) => normalizarNome(p.nome) === normalizarNome(nome)))
+            .filter(Boolean);
+          return {
+            id: novoId(),
+            nome: timeMsg.nome,
+            jogadores,
+            nivel_medio: jogadores.length
+              ? (jogadores.reduce((sum, p) => sum + (p.ranking || 0), 0) / jogadores.length).toFixed(2)
+              : "0.00",
+          };
+        }).filter((time) => time.jogadores.length);
+        restaurados = times.length;
+        salvarTimesLocais();
+      }
       const pendentes = participantes.filter((p) => !p.cadastro_id).length;
-      $("msg-importar").textContent = `✅ ${nomes.length} importados localmente.${pendentes ? ` ${pendentes} atleta(s) precisam ser adicionados ao Cadastro.` : ""} Lista anterior removida.`;
+      $("msg-importar").textContent = restaurados
+        ? `✅ ${nomes.length} importados e ${restaurados} times restaurados.${pendentes ? ` ${pendentes} atleta(s) precisam ser adicionados ao Cadastro.` : ""}`
+        : `✅ ${nomes.length} importados localmente.${pendentes ? ` ${pendentes} atleta(s) precisam ser adicionados ao Cadastro.` : ""} Lista anterior removida.`;
       $("msg-importar").className = "msg";
       $("whatsapp-texto").value = "";
       $("preview-importar").style.display = "none";

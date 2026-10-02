@@ -170,11 +170,12 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .cadastro-linha { flex-wrap: wrap; }
 .cadastro-linha input { flex: 1; min-width: 150px; }
 .cadastro-linha select { min-width: 90px; }
-.lista-cadastro { display: grid; gap: 8px; margin-top: 12px; }
-.atleta-cadastro { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--borda); border-radius: 10px; background: var(--card); cursor: grab; }
+.lista-cadastro { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin-top: 12px; }
+.atleta-cadastro { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--borda); border-radius: 10px; background: var(--card); cursor: grab; min-width: 0; overflow-wrap: anywhere; }
+.atleta-cadastro .linha select { flex: 1 1 130px; }
 .atleta-cadastro.arrastando { opacity: 0.45; }
 .atleta-cadastro.alvo-arraste { border-color: var(--acento); box-shadow: 0 0 0 2px var(--acento-suave); }
-.cabecalho-cadastro { display: flex; justify-content: space-between; gap: 8px; font-weight: 600; }
+.cabecalho-cadastro { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; font-weight: 600; }
 .cabecalho-cadastro h2 { font-size: 17px; }
 .nome-cabecalho-cadastro { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; }
 .nome-cabecalho-cadastro input { flex: 1; min-width: 0; font-weight: 600; }
