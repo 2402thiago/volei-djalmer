@@ -145,7 +145,7 @@ const correspondeFiltroPote = (p, filtro) => {
   return pote === filtro;
 };
 
-const NIVEIS = ["C1", "M1", "M2", "F1", "F2", "LM1", "LF1"];
+const NIVEIS = ["C1", "LM1", "LF1", "M1", "M2", "F1", "F2"];
 const STORAGE_CADASTRO = "volei.cadastro.atletas.v1";
 const STORAGE_SHEETS_CONECTADO = "volei.sheets.conectado.v1";
 let cadastroAtletas = [];
@@ -536,35 +536,51 @@ function atualizarNomeParticipante(participante, nome) {
 }
 
 function selecionarTop4PorNivel(ativos) {
-  // Ordena pelo ranking da lista master (1 = mais forte)
-  const ordenados = [...ativos].sort((a, b) => (a.ranking || 999) - (b.ranking || 999));
-  const agrupar = (chaves) => ordenados.filter((p) => chaves.includes(p.nivel));
+  // A ordem da Lista Master e o nível principal determinam a classificação.
+  // Quando um nível excede quatro atletas, o excedente desce para o próximo
+  // nível compatível, preservando o ranking relativo.
   const grupos = {
-    C1: agrupar(["C1"]),
-    Levantadores: agrupar(["LM1", "LF1"]),
-    M1: agrupar(["M1"]),
-    F1: agrupar(["F1"]),
-    M2: agrupar(["M2"]),
-    F2: agrupar(["F2"]),
+    C1: [],
+    Levantadores: [],
+    M1: [],
+    F1: [],
+    M2: [],
+    F2: [],
   };
-  // Preenche 4 vagas por categoria; se faltar, completa com os melhores ainda não usados
-  const prioridade = ["C1", "Levantadores", "M1", "F1", "M2", "F2"];
-  const usados = new Set();
-  const selecionados = {};
-  for (const categoria of prioridade) {
-    const proprios = grupos[categoria].filter((p) => !usados.has(p.id));
-    const escolhidos = proprios.slice(0, 4);
-    escolhidos.forEach((p) => usados.add(p.id));
-    const faltam = 4 - escolhidos.length;
-    if (faltam > 0) {
-      const extras = ordenados.filter((p) => !usados.has(p.id)).slice(0, faltam);
-      extras.forEach((p) => usados.add(p.id));
-      selecionados[categoria] = [...escolhidos, ...extras];
-    } else {
-      selecionados[categoria] = escolhidos;
-    }
-  }
-  return selecionados;
+  const limites = Object.fromEntries(Object.keys(grupos).map((grupo) => [grupo, 4]));
+  const categoriaPrincipal = (nivel) => (nivel === "LM1" || nivel === "LF1" ? "Levantadores" : nivel);
+  const opcoesPorNivel = (atleta) => {
+    const masculino = atleta.sexo === "M";
+    const feminino = atleta.sexo === "F";
+    const opcoes = {
+      C1: ["C1", ...(masculino ? ["M1", "M2"] : []), ...(feminino ? ["F1", "F2"] : [])],
+      LM1: ["Levantadores", "M1", "M2"],
+      LF1: ["Levantadores", "F1", "F2"],
+      M1: ["M1", "M2"],
+      M2: ["M2"],
+      F1: ["F1", "F2"],
+      F2: ["F2"],
+    }[atleta.nivel];
+    return opcoes || [];
+  };
+
+  [...ativos]
+    .sort((a, b) => (a.ranking || 999) - (b.ranking || 999))
+    .forEach((atleta) => {
+      const categoria = opcoesPorNivel(atleta).find((opcao) => grupos[opcao].length < limites[opcao]);
+      if (!categoria) {
+        throw new Error(`Não há vaga compatível para ${atleta.nome} (${atleta.nivel}). Revise os níveis da Lista Master.`);
+      }
+      grupos[categoria].push(atleta);
+      atleta.pote_sorteio = categoria;
+      atleta.promovido_de = categoriaPrincipal(atleta.nivel) !== categoria ? atleta.nivel : null;
+    });
+
+  const faltantes = Object.entries(limites)
+    .filter(([categoria, limite]) => grupos[categoria].length !== limite)
+    .map(([categoria, limite]) => `${categoria}: ${grupos[categoria].length}/${limite}`);
+  if (faltantes.length) throw new Error(`Níveis insuficientes para sortear:\n${faltantes.join("\n")}`);
+  return grupos;
 }
 
 function categoriaNucleo(p) {
@@ -1744,12 +1760,15 @@ function montarTimesLocais() {
   for (let tentativa = 0; tentativa < 100 && !timesNovos; tentativa++) {
     const timesTentativa = [0, 1, 2, 3].map((indice) => ({ id: novoId(), nome: `Time ${indice + 1}`, jogadores: [], nivel_medio: "0.00" }));
     try {
+      // O núcleo C1 + levantador é sempre fixado antes dos demais atletas.
+      // Assim, casais ou outras restrições não alteram o pareamento definido
+      // pelo ranking da Lista Master.
+      preencherNucleoC1Lev(top, timesTentativa);
+
       // Casais ativos: sempre juntos no mesmo time
       let usados = new Set();
       let ausentesT = [];
       if (sorteioComCasais) ({ ausentes: ausentesT, usados } = posicionarCasais(top, timesTentativa));
-      // Nivelamento fixo: 1 C1 + 1 Levantador por time, pareando opostos
-      preencherNucleoC1Lev(top, timesTentativa, usados);
       // Viabilidade rápida: restantes de cada categoria precisam de vagas
       if (!["M1", "F1", "M2", "F2"].every((c) => {
         const limite = (c === "M2" || c === "F2") ? 2 : 1;
