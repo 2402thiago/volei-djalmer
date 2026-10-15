@@ -312,9 +312,7 @@ function aplicarPotesDoSorteio() {
   if (ativos.length !== 24) throw new Error(`É necessário ter exatamente 24 atletas ativos. Atual: ${ativos.length}.`);
   const pendencias = ativos.filter((p) => !p.cadastro_id || !p.sexo || !p.nivel);
   if (pendencias.length) throw new Error(`Atletas pendentes de cadastro ou nivelamento: ${pendencias.map((p) => p.nome).join(", ")}.`);
-  const atribuicoes = calcularAtribuicaoPotes(ativos);
-  ativos.forEach((p) => { p.pote_sorteio = atribuicoes.get(p.id); });
-  criarTimesComRestricoes(ativos);
+  selecionarTop4PorNivel(ativos);
   salvarParticipantesLocais();
   renderParticipantes();
 }
@@ -536,9 +534,6 @@ function atualizarNomeParticipante(participante, nome) {
 }
 
 function selecionarTop4PorNivel(ativos) {
-  // A ordem da Lista Master e o nível principal determinam a classificação.
-  // Quando um nível excede quatro atletas, o excedente desce para o próximo
-  // nível compatível, preservando o ranking relativo.
   const grupos = {
     C1: [],
     Levantadores: [],
@@ -547,44 +542,62 @@ function selecionarTop4PorNivel(ativos) {
     M2: [],
     F2: [],
   };
-  const limites = Object.fromEntries(Object.keys(grupos).map((grupo) => [grupo, 4]));
-  const categoriaPrincipal = (nivel) => (nivel === "LM1" || nivel === "LF1" ? "Levantadores" : nivel);
-  const opcoesPorNivel = (atleta) => {
-    const masculino = atleta.sexo === "M";
-    const feminino = atleta.sexo === "F";
-    const opcoes = {
-      C1: ["C1", ...(masculino ? ["M1", "M2"] : []), ...(feminino ? ["F1", "F2"] : [])],
-      LM1: ["Levantadores", "M1", "M2"],
-      LF1: ["Levantadores", "F1", "F2"],
-      M1: ["M1", "M2"],
-      M2: ["M2"],
-      F1: ["F1", "F2"],
-      F2: ["F2"],
-    }[atleta.nivel];
-    return opcoes || [];
+  const limites = { C1: 4, Levantadores: 4, M1: 4, F1: 4, Base: 8 };
+  const rank = (p) => p.ranking || 999;
+  const ordenados = [...ativos].sort((a, b) => rank(a) - rank(b));
+  const permissoes = (p) => new Set([p.nivel, ...(p.potes_adicionais || [])].filter(Boolean));
+  const tem = (p, nivel) => permissoes(p).has(nivel);
+  const basePreferida = (p) => {
+    const preferido = p.sexo === "M" ? "M2" : "F2";
+    const outro = preferido === "M2" ? "F2" : "M2";
+    if (tem(p, preferido)) return preferido;
+    if (tem(p, outro)) return outro;
+    return preferido;
   };
-
-  [...ativos]
-    .sort((a, b) => (a.ranking || 999) - (b.ranking || 999))
-    .forEach((atleta) => {
-      const categoria = opcoesPorNivel(atleta).find((opcao) => grupos[opcao].length < limites[opcao]);
-      if (!categoria) {
-        throw new Error(`Não há vaga compatível para ${atleta.nome} (${atleta.nivel}). Revise os níveis da Lista Master.`);
-      }
-      grupos[categoria].push(atleta);
-      atleta.pote_sorteio = categoria;
-      atleta.promovido_de = categoriaPrincipal(atleta.nivel) !== categoria ? atleta.nivel : null;
+  const opcoes = (p) => {
+    const resultado = [];
+    if (tem(p, "C1")) resultado.push("C1");
+    if ((p.sexo === "M" && tem(p, "LM1")) || (p.sexo === "F" && tem(p, "LF1"))) resultado.push("Levantadores");
+    if (tem(p, "M1") || (tem(p, "C1") && p.sexo === "M") || (tem(p, "LM1") && p.sexo === "M")) resultado.push("M1");
+    if (tem(p, "F1") || (tem(p, "C1") && p.sexo === "F") || (tem(p, "LF1") && p.sexo === "F")) resultado.push("F1");
+    if (tem(p, "M2") || tem(p, "F2") || tem(p, "M1") || tem(p, "F1") || tem(p, "C1") || tem(p, "LM1") || tem(p, "LF1")) resultado.push("Base");
+    return [...new Set(resultado)];
+  };
+  const candidatos = ordenados.map((p) => ({ p, opcoes: opcoes(p) }));
+  const semOpcao = candidatos.filter((item) => !item.opcoes.length);
+  if (semOpcao.length) throw new Error(`Atletas sem nível elegível na Lista Master: ${semOpcao.map((item) => item.p.nome).join(", ")}.`);
+  const contagens = Object.fromEntries(Object.keys(limites).map((key) => [key, 0]));
+  const alocacoes = new Map();
+  const buscar = (indice) => {
+    if (indice === candidatos.length) return Object.entries(limites).every(([key, limite]) => contagens[key] === limite);
+    const restantes = candidatos.slice(indice);
+    if (Object.entries(limites).some(([key, limite]) => contagens[key] > limite || contagens[key] + restantes.filter((item) => item.opcoes.includes(key)).length < limite)) return false;
+    const item = candidatos[indice];
+    const escolhas = [...item.opcoes].sort((a, b) => (a === item.p.nivel || (a === "Levantadores" && ["LM1", "LF1"].includes(item.p.nivel)) ? -1 : 0) - (b === item.p.nivel || (b === "Levantadores" && ["LM1", "LF1"].includes(item.p.nivel)) ? -1 : 0));
+    return escolhas.some((categoria) => {
+      if (contagens[categoria] >= limites[categoria]) return false;
+      contagens[categoria] += 1;
+      alocacoes.set(item.p.id, categoria);
+      if (buscar(indice + 1)) return true;
+      contagens[categoria] -= 1;
+      alocacoes.delete(item.p.id);
+      return false;
     });
-
-  const faltantes = Object.entries(limites)
-    .filter(([categoria, limite]) => grupos[categoria].length !== limite)
-    .map(([categoria, limite]) => `${categoria}: ${grupos[categoria].length}/${limite}`);
-  if (faltantes.length) throw new Error(`Níveis insuficientes para sortear:\n${faltantes.join("\n")}`);
+  };
+  if (!buscar(0)) throw new Error("Não foi possível preencher C1, levantadores, M1, F1 e o bloco M2/F2 com os atletas da Lista Master.");
+  candidatos.forEach(({ p }) => {
+    const categoria = alocacoes.get(p.id);
+    const pote = categoria === "Base" ? basePreferida(p) : categoria;
+    grupos[categoria === "Base" ? pote : categoria].push(p);
+    p.pote_sorteio = categoria === "Levantadores" ? "levantadores" : pote;
+    p.promovido_de = p.nivel !== p.pote_sorteio && !(categoria === "Levantadores" && ["LM1", "LF1"].includes(p.nivel)) ? p.nivel : null;
+  });
   return grupos;
 }
 
 function categoriaNucleo(p) {
-  return (p.nivel === "LM1" || p.nivel === "LF1") ? "Levantadores" : p.nivel;
+  const pote = p.pote_sorteio || p.nivel;
+  return pote === "levantadores" || pote === "LM1" || pote === "LF1" ? "Levantadores" : pote;
 }
 
 function posicionarCasais(top, timesNovos) {
@@ -1760,15 +1773,13 @@ function montarTimesLocais() {
   for (let tentativa = 0; tentativa < 100 && !timesNovos; tentativa++) {
     const timesTentativa = [0, 1, 2, 3].map((indice) => ({ id: novoId(), nome: `Time ${indice + 1}`, jogadores: [], nivel_medio: "0.00" }));
     try {
-      // O núcleo C1 + levantador é sempre fixado antes dos demais atletas.
-      // Assim, casais ou outras restrições não alteram o pareamento definido
-      // pelo ranking da Lista Master.
-      preencherNucleoC1Lev(top, timesTentativa);
-
       // Casais ativos: sempre juntos no mesmo time
       let usados = new Set();
       let ausentesT = [];
       if (sorteioComCasais) ({ ausentes: ausentesT, usados } = posicionarCasais(top, timesTentativa));
+      // Sem casal conflitante, o núcleo segue o pareamento do ranking. Casais
+      // já posicionados podem ocupar ou alterar esse núcleo deliberadamente.
+      preencherNucleoC1Lev(top, timesTentativa, usados);
       // Viabilidade rápida: restantes de cada categoria precisam de vagas
       if (!["M1", "F1", "M2", "F2"].every((c) => {
         const limite = (c === "M2" || c === "F2") ? 2 : 1;
