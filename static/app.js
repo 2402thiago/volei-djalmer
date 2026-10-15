@@ -1211,7 +1211,7 @@ function timePorId(id) { return times.find((time) => time.id === id); }
 
 function nomearTimesPorC1(lista) {
   lista.forEach((time, indice) => {
-    const c1 = time.jogadores.find((jogador) => jogador.pote_sorteio === "C1" || jogador.nivel === "C1");
+    const c1 = time.jogadores.find((jogador) => jogador.pote_sorteio === "C1");
     if (c1?.nome) time.nome = `Time ${c1.nome}`;
     else if (!time.nome || /^Time \d+$/.test(time.nome)) time.nome = `Time ${indice + 1}`;
   });
