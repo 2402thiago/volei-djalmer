@@ -30,3 +30,6 @@ Thumbs.db
 *.cache.json
 .vercel
 .env*
+
+# Grafo gerado pelo graphify
+graphify-out/

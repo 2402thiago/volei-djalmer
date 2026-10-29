@@ -1,0 +1,8 @@
+{
+  "name": "volei-djalmer",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  }
+}

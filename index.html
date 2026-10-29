@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0D1626" />
+  <title>Vôlei Djalmer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap" />
+  <link rel="stylesheet" href="css/style.css" />
+  <script type="module" src="js/main.js"></script>
+</head>
+<body>
+  <header class="topo">
+    <h1 class="marca">Vôlei Djalmer</h1>
+  </header>
+
+  <main>
+    <section id="tela-presenca" class="tela" aria-labelledby="aba-presenca"></section>
+    <section id="tela-times" class="tela" aria-labelledby="aba-times" hidden></section>
+    <section id="tela-master" class="tela" aria-labelledby="aba-master" hidden></section>
+  </main>
+
+  <nav class="abas" aria-label="Telas">
+    <button id="aba-master" class="aba" data-tela="master">Lista Master</button>
+    <button id="aba-presenca" class="aba" data-tela="presenca" aria-current="page">Presença</button>
+    <button id="aba-times" class="aba" data-tela="times">Times</button>
+  </nav>
+
+  <dialog id="dialogo" class="dialogo">
+    <form method="dialog" class="dialogo-corpo">
+      <h2 id="dialogo-titulo"></h2>
+      <div id="dialogo-conteudo"></div>
+      <div class="acoes">
+        <button value="cancelar" class="botao secundario" id="dialogo-cancelar">Cancelar</button>
+        <button value="ok" class="botao primario" id="dialogo-ok">Confirmar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="aviso" class="aviso" role="status" aria-live="polite" hidden></div>
+</body>
+</html>

@@ -1,0 +1,561 @@
+/* Vôlei Djalmer: quadra à noite, bola amarela. */
+
+:root {
+  --noite: #0D1626;
+  --quadra: #16233A;
+  --quadra-alta: #1E2E4A;
+  --linha: #2A3B58;
+  --bola: #FFC93C;
+  --bola-escura: #3A2F0E;
+  --giz: #EEF2F7;
+  --nevoa: #8E9BB3;
+  --alerta: #FF8A65;
+
+  --fonte-placar: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --fonte-texto: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  --t-pequeno: 0.8125rem;
+  --t-base: 1rem;
+  --t-medio: 1.25rem;
+  --t-grande: 1.75rem;
+  --t-placar: clamp(6rem, 34vw, 9.5rem);
+
+  --raio: 10px;
+  --raio-chip: 999px;
+  --espaco: 1rem;
+  --abas-altura: 4rem;
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--noite);
+  color: var(--giz);
+  font: 400 var(--t-base)/1.45 var(--fonte-texto);
+  padding-bottom: calc(var(--abas-altura) + env(safe-area-inset-bottom) + 1.5rem);
+}
+
+h1, h2, h3 { margin: 0; font-weight: 600; line-height: 1.15; }
+
+button, input, select, textarea { font: inherit; color: inherit; }
+
+:focus-visible { outline: 3px solid var(--bola); outline-offset: 2px; }
+
+[hidden] { display: none !important; }
+
+/* ---- Topo e abas ---------------------------------------------------- */
+
+.topo {
+  padding: calc(env(safe-area-inset-top) + 0.9rem) var(--espaco) 0.4rem;
+  max-width: 40rem;
+  margin: 0 auto;
+}
+
+.marca {
+  font: 700 var(--t-medio)/1 var(--fonte-placar);
+  letter-spacing: 0.02em;
+  color: var(--nevoa);
+}
+
+main { max-width: 40rem; margin: 0 auto; padding: 0 var(--espaco); }
+
+.abas {
+  position: fixed;
+  inset: auto 0 0 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  height: calc(var(--abas-altura) + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
+  background: var(--quadra);
+  border-top: 1px solid var(--linha);
+  z-index: 10;
+}
+
+.aba {
+  position: relative;
+  border: 0;
+  background: none;
+  color: var(--nevoa);
+  font: 600 var(--t-medio)/1 var(--fonte-placar);
+  letter-spacing: 0.01em;
+  cursor: pointer;
+}
+
+.aba[aria-current="page"] { color: var(--giz); }
+
+.aba[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 25%;
+  right: 25%;
+  height: 3px;
+  border-radius: 0 0 3px 3px;
+  background: var(--bola);
+}
+
+.aba[data-contagem]::after {
+  content: attr(data-contagem);
+  margin-left: 0.35em;
+  font-variant-numeric: tabular-nums;
+  color: var(--bola);
+}
+
+/* ---- Placar de presença (o elemento de destaque) -------------------- */
+
+.placar {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: baseline;
+  column-gap: 0.25rem;
+  padding: 0.5rem 0 1.25rem;
+  font-family: var(--fonte-placar);
+  font-variant-numeric: tabular-nums;
+}
+
+.placar-numero {
+  font-size: var(--t-placar);
+  font-weight: 700;
+  line-height: 0.82;
+  letter-spacing: -0.03em;
+  color: var(--giz);
+}
+
+.placar-total {
+  font-size: calc(var(--t-placar) * 0.38);
+  font-weight: 600;
+  color: var(--nevoa);
+}
+
+.placar-legenda {
+  grid-column: 1 / -1;
+  margin: 0.75rem 0 0;
+  font: 500 var(--t-medio)/1.25 var(--fonte-texto);
+  color: var(--nevoa);
+}
+
+.placar-pronto .placar-numero { color: var(--bola); }
+.placar-pronto .placar-legenda { color: var(--giz); }
+.placar-sobra .placar-numero { color: var(--alerta); }
+
+.placar.compacto { --t-placar: clamp(4rem, 22vw, 5.5rem); padding-bottom: 0.75rem; }
+
+/* ---- Botões e campos ------------------------------------------------ */
+
+.botao {
+  min-height: 2.75rem;
+  padding: 0.55rem 1.1rem;
+  border-radius: var(--raio);
+  border: 1px solid transparent;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 80ms ease-out, background-color 120ms;
+}
+
+.botao:active:not(:disabled) { transform: scale(0.97); }
+.botao:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.primario { background: var(--bola); color: var(--noite); }
+.secundario { background: var(--quadra-alta); border-color: var(--linha); }
+.fantasma { background: none; color: var(--nevoa); }
+.perigo { background: none; border-color: var(--alerta); color: var(--alerta); }
+
+.grande {
+  width: 100%;
+  min-height: 3.75rem;
+  font: 700 var(--t-grande)/1 var(--fonte-placar);
+  letter-spacing: 0.01em;
+}
+
+.largo { width: 100%; margin-top: 1rem; }
+
+.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--bola);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+input:not([type=checkbox]), select, textarea {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--linha);
+  border-radius: var(--raio);
+  background: var(--noite);
+}
+
+textarea { resize: vertical; line-height: 1.4; }
+
+input::placeholder, textarea::placeholder { color: var(--nevoa); opacity: 0.7; }
+
+.rotulo { display: grid; gap: 0.3rem; font-size: var(--t-pequeno); color: var(--nevoa); }
+.rotulo input, .rotulo select { color: var(--giz); font-size: var(--t-base); }
+
+.nota { font-size: var(--t-pequeno); color: var(--nevoa); }
+.nota.alerta { color: var(--alerta); }
+
+.acoes { display: flex; flex-wrap: wrap; gap: 0.6rem; margin: 1rem 0; }
+.acoes .botao { flex: 1 1 auto; }
+
+.linha { display: flex; gap: 0.6rem; }
+.linha > * { flex: 1; }
+
+.vazio { margin: 2rem 0; color: var(--nevoa); }
+
+.subtitulo {
+  margin: 1.5rem 0 0.5rem;
+  font: 600 var(--t-medio)/1 var(--fonte-placar);
+  color: var(--nevoa);
+}
+
+/* Chave liga/desliga */
+.chave { display: flex; align-items: center; gap: 0.75rem; cursor: pointer; }
+.chave input { position: absolute; opacity: 0; pointer-events: none; }
+.chave-trilho {
+  flex: none;
+  position: relative;
+  width: 2.75rem;
+  height: 1.6rem;
+  border-radius: var(--raio-chip);
+  background: var(--linha);
+  transition: background-color 150ms;
+}
+.chave-trilho::after {
+  content: "";
+  position: absolute;
+  top: 0.2rem;
+  left: 0.2rem;
+  width: 1.2rem;
+  height: 1.2rem;
+  border-radius: 50%;
+  background: var(--giz);
+  transition: transform 150ms;
+}
+.chave input:checked + .chave-trilho { background: var(--bola); }
+.chave input:checked + .chave-trilho::after { transform: translateX(1.15rem); background: var(--noite); }
+.chave input:focus-visible + .chave-trilho { outline: 3px solid var(--bola); outline-offset: 2px; }
+.chave input:disabled + .chave-trilho { opacity: 0.4; }
+.chave .nota { display: block; }
+
+/* Etiquetas de pote e sexo */
+.pote, .sexo {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3em;
+  padding: 0.05rem 0.5rem;
+  border-radius: var(--raio-chip);
+  font: 600 var(--t-pequeno)/1.5 var(--fonte-placar);
+  font-size: 0.9375rem;
+  letter-spacing: 0.02em;
+  background: var(--quadra-alta);
+  color: var(--giz);
+  white-space: nowrap;
+}
+.sexo { min-width: 1.6rem; justify-content: center; color: var(--nevoa); background: none; border: 1px solid var(--linha); }
+.pote.extra { background: none; color: var(--nevoa); border: 1px dashed var(--linha); }
+.pote.promovido { background: var(--bola-escura); color: var(--bola); }
+.pote small { font-weight: 500; color: var(--nevoa); }
+.faltando { color: var(--alerta); border-color: var(--alerta); background: none; }
+
+/* ---- Presença ------------------------------------------------------- */
+
+.colar {
+  border: 1px solid var(--linha);
+  border-radius: var(--raio);
+  background: var(--quadra);
+}
+.colar summary {
+  padding: 0.85rem 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  list-style-position: inside;
+}
+.colar[open] { padding-bottom: 1rem; }
+.colar .rotulo, .colar textarea, .colar .botao { margin: 0 1rem; width: calc(100% - 2rem); }
+.colar textarea { margin-top: 0.5rem; margin-bottom: 0.75rem; }
+
+.bloco {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  border-radius: var(--raio);
+  background: var(--quadra);
+}
+.bloco h2 { font: 600 var(--t-grande)/1.1 var(--fonte-placar); }
+.bloco > .nota { margin: 0.35rem 0 0.75rem; }
+
+.pendencias { border-left: 4px solid var(--alerta); }
+
+.lista-pendentes, .lista-presenca, .lista-master, .lista-casais, .time-jogadores, .problemas, .previa {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lista-pendentes li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.5rem;
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--linha);
+}
+.lista-pendentes .pendente-nome { grid-column: 1 / -1; font-weight: 600; }
+.lista-pendentes select { grid-column: 1 / -1; }
+
+.busca { margin-top: 1.25rem; }
+
+.lista-presenca { display: grid; gap: 0.4rem; }
+
+.presenca {
+  display: grid;
+  grid-template-columns: 2.25rem 1fr auto;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 3.25rem;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--linha);
+  border-radius: var(--raio);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.presenca.marcada { background: var(--quadra-alta); border-color: var(--bola); }
+.presenca.marcada .rank { color: var(--bola); }
+.presenca-nome { font-weight: 500; }
+
+.rank {
+  font: 600 var(--t-medio)/1 var(--fonte-placar);
+  font-variant-numeric: tabular-nums;
+  color: var(--nevoa);
+  text-align: right;
+}
+
+/* ---- Times ---------------------------------------------------------- */
+
+.problemas { margin-bottom: 0.5rem; color: var(--nevoa); }
+.problemas li { padding: 0.2rem 0; }
+
+.controle-sorteio {
+  display: grid;
+  gap: 1rem;
+  margin: 1.25rem 0;
+  padding: 1rem;
+  border-radius: var(--raio);
+  background: var(--quadra);
+}
+
+.grade-times { display: grid; gap: 0.75rem; }
+@media (min-width: 36rem) { .grade-times { grid-template-columns: 1fr 1fr; } }
+
+.time {
+  padding: 1rem 1rem 0.75rem;
+  border-radius: var(--raio);
+  background: var(--quadra);
+  border-top: 4px solid var(--bola);
+}
+.time-nome {
+  margin-bottom: 0.5rem;
+  font: 700 var(--t-grande)/1.05 var(--fonte-placar);
+}
+.time-jogadores { counter-reset: jogador; }
+.time-jogadores li {
+  display: grid;
+  grid-template-columns: 1.5rem 1fr auto auto;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0;
+  border-top: 1px solid var(--linha);
+}
+.time-jogadores li::before {
+  counter-increment: jogador;
+  content: counter(jogador);
+  font: 600 var(--t-base)/1 var(--fonte-placar);
+  color: var(--nevoa);
+}
+
+/* Único momento animado: os times aparecem um a um depois do sorteio. */
+.revelar .time { animation: entrar 360ms cubic-bezier(.2, .7, .2, 1) both; animation-delay: calc(var(--ordem) * 90ms); }
+@keyframes entrar { from { opacity: 0; transform: translateY(12px) scale(0.98); } }
+
+/* ---- Lista Master --------------------------------------------------- */
+
+.cabecalho-tela { margin: 0.5rem 0 0.25rem; }
+.cabecalho-tela h2 { font: 700 2.5rem/1 var(--fonte-placar); }
+
+.novo-atleta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  padding: 1rem;
+  border-radius: var(--raio);
+  background: var(--quadra);
+}
+.novo-atleta input, .novo-atleta .botao { grid-column: 1 / -1; }
+
+.filtros {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.75rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.filtro {
+  flex: none;
+  min-height: 2.25rem;
+  padding: 0.3rem 0.85rem;
+  border-radius: var(--raio-chip);
+  border: 1px solid var(--linha);
+  background: none;
+  color: var(--nevoa);
+  font: 600 var(--t-base)/1 var(--fonte-placar);
+  cursor: pointer;
+}
+.filtro[aria-pressed="true"] { background: var(--giz); border-color: var(--giz); color: var(--noite); }
+
+.lista-master { margin-top: 1rem; display: grid; gap: 0.4rem; }
+
+.atleta { border-radius: var(--raio); background: var(--quadra); }
+.atleta.editando { outline: 1px solid var(--bola); }
+.atleta.arrastando { opacity: 0.55; }
+.atleta.alvo { box-shadow: 0 -3px 0 var(--bola); }
+
+.atleta-linha {
+  display: grid;
+  grid-template-columns: 1.75rem 2rem 1fr auto;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 3.5rem;
+  padding-right: 0.25rem;
+}
+
+.alca {
+  align-self: stretch;
+  touch-action: none;
+  cursor: grab;
+  background: radial-gradient(circle, var(--nevoa) 1.3px, transparent 1.6px) center / 7px 7px repeat-y;
+  background-size: 7px 7px;
+  background-position: center;
+  margin: 0.8rem 0 0.8rem 0.6rem;
+  width: 0.9rem;
+  opacity: 0.6;
+}
+
+.atleta-info {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.5rem 0.25rem;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.atleta-nome { font-weight: 600; }
+.atleta-meta { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+
+.ordem { display: grid; grid-template-rows: 1fr 1fr; }
+.ordem button {
+  width: 2.75rem;
+  height: 1.75rem;
+  border: 0;
+  background: none;
+  color: var(--nevoa);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+.ordem button:disabled { opacity: 0.2; cursor: default; }
+
+.editor {
+  display: grid;
+  gap: 0.9rem;
+  padding: 0.25rem 1rem 1rem;
+  border-top: 1px solid var(--linha);
+  padding-top: 1rem;
+}
+.editor .acoes { margin: 0; }
+
+.adicionais { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0; padding: 0; border: 0; }
+.adicionais legend { margin-bottom: 0.4rem; font-size: var(--t-pequeno); color: var(--nevoa); }
+.marcador input { position: absolute; opacity: 0; pointer-events: none; }
+.marcador span {
+  display: inline-block;
+  min-width: 3rem;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--linha);
+  border-radius: var(--raio-chip);
+  font: 600 var(--t-base)/1 var(--fonte-placar);
+  text-align: center;
+  color: var(--nevoa);
+  cursor: pointer;
+}
+.marcador input:checked + span { background: var(--bola); border-color: var(--bola); color: var(--noite); }
+.marcador input:focus-visible + span { outline: 3px solid var(--bola); outline-offset: 2px; }
+
+.apelidos { display: grid; gap: 0.5rem; }
+.fichas { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.ficha {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.1rem 0.25rem 0.1rem 0.65rem;
+  border-radius: var(--raio-chip);
+  background: var(--quadra-alta);
+}
+.ficha button { width: 1.75rem; height: 1.75rem; border: 0; background: none; color: var(--nevoa); cursor: pointer; }
+
+.lista-casais li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--linha);
+}
+.novo-casal { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 0.75rem; }
+.novo-casal .botao { grid-column: 1 / -1; }
+
+/* ---- Diálogo e aviso ------------------------------------------------ */
+
+.dialogo {
+  width: min(36rem, calc(100% - 1.5rem));
+  max-height: calc(100dvh - 2rem);
+  padding: 0;
+  border: 1px solid var(--linha);
+  border-radius: 14px;
+  background: var(--quadra);
+  color: var(--giz);
+}
+.dialogo::backdrop { background: rgba(5, 10, 20, 0.7); }
+.dialogo-corpo { display: grid; gap: 0.75rem; padding: 1.25rem; }
+.dialogo h2 { font: 700 var(--t-grande)/1.1 var(--fonte-placar); }
+.dialogo .acoes { margin-bottom: 0; }
+.previa li { padding: 0.35rem 0; }
+.previa strong { font: 700 var(--t-medio)/1 var(--fonte-placar); color: var(--bola); }
+.previa .nota { display: block; }
+
+.aviso {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--abas-altura) + env(safe-area-inset-bottom) + 0.75rem);
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100% - 2rem);
+  padding: 0.7rem 1rem;
+  border-radius: var(--raio);
+  background: var(--giz);
+  color: var(--noite);
+  font-weight: 500;
+  white-space: pre-line;
+  z-index: 20;
+}
+.aviso.erro { background: var(--alerta); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

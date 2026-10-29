@@ -1,1 +1,0 @@
-"""Pacote principal do sistema de gestão de torneio de vôlei."""
