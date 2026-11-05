@@ -225,11 +225,6 @@ export function aplicarListaGrupo(estado, nomes) {
   return { marcados: ids.length, pendentes };
 }
 
-export function alternarConfirmado(estado, id) {
-  const ids = estado.lista.ids;
-  estado.lista.ids = ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id];
-}
-
 /** Resolve um nome pendente: vincula a um atleta (vira apelido) ou cadastra novo. */
 export function resolverPendente(estado, nome, idAtleta) {
   const atleta = idAtleta

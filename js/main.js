@@ -2,7 +2,7 @@
 
 import {
   carregar, salvar, adicionarAtleta, atualizarAtleta, adicionarAlias, removerAtleta, moverAtleta,
-  previaImportacao, aplicarImportacao, aplicarListaGrupo, alternarConfirmado, resolverPendente,
+  previaImportacao, aplicarImportacao, aplicarListaGrupo, resolverPendente,
   confirmadosParaSorteio, casaisParaSorteio, encontrarAtleta, definirTimes, desfazerTimes,
   aplicarTimesColados, alternarCheckin, chegou, zerarCheckin,
 } from "./dados.js";
@@ -164,18 +164,13 @@ function situacaoLista() {
 
 function renderLista() {
   const situacao = situacaoLista();
-  const confirmados = new Set(estado.lista.ids);
-  const celula = (atleta) => {
-    const marcado = confirmados.has(atleta.id);
-    return `<li data-busca="${esc(`${atleta.nome} ${atleta.aliases.join(" ")}`.toLowerCase())}">
-      <button class="celula celula-marcavel" data-acao="alternar-confirmado" data-id="${atleta.id}" aria-pressed="${marcado}">
-        <span class="celula-texto">${esc(atleta.nome)}</span>
-        <span class="celula-detalhe">${atleta.pote || "Sem pote"}</span>
-        <span class="marca">${marcado ? ICONES.check : ""}</span>
-      </button></li>`;
-  };
-  const marcados = estado.atletas.filter((a) => confirmados.has(a.id));
-  const outros = estado.atletas.filter((a) => !confirmados.has(a.id));
+  // Só aparecem os nomes importados da lista do grupo, na ordem da mensagem.
+  const celula = (atleta, indice) => `<li class="celula" data-busca="${esc(`${atleta.nome} ${atleta.aliases.join(" ")}`.toLowerCase())}">
+      <span class="rank">${indice + 1}</span>
+      <span class="celula-texto">${esc(atleta.nome)}</span>
+      <span class="celula-detalhe">${atleta.pote || "Sem pote"}</span>
+    </li>`;
+  const marcados = estado.lista.ids.map((id) => estado.atletas.find((a) => a.id === id)).filter(Boolean);
   const opcoesVinculo = estado.atletas.map((a) => [a.id, a.nome]);
 
   $("#tela-lista").innerHTML = `
@@ -198,12 +193,14 @@ function renderLista() {
         </span>
       </li>`).join(""),
     }) : ""}
-    ${estado.atletas.length ? `
+    ${marcados.length ? `
       <input type="search" class="busca" id="busca-lista" placeholder="Buscar" value="${esc(ui.buscaLista)}" aria-label="Buscar atleta" />
-      ${marcados.length ? grupo({ cabecalho: "Confirmados", celulas: marcados.map(celula).join("") }) : ""}
-      ${outros.length ? grupo({ cabecalho: "Não confirmados", celulas: outros.map(celula).join("") }) : ""}
-      ${estado.lista.ids.length || estado.lista.pendentes.length ? grupo({ celulas: celulaAcao("limpar-lista", "Limpar lista", { perigo: true }) }) : ""}
-    ` : `<p class="vazio">A Lista Master está vazia. Cadastre os atletas ou importe a lista na aba Lista Master.</p>`}
+      ${grupo({ cabecalho: "Confirmados", celulas: marcados.map(celula).join("") })}
+    ` : (estado.lista.pendentes.length ? "" : `<p class="vazio">Nenhum nome ainda. Toque em Colar lista do grupo.</p>`)}
+    ${estado.lista.ids.length || estado.lista.pendentes.length ? grupo({
+      celulas: celulaAcao("limpar-lista", "Limpar lista", { perigo: true }) + celulaAcao("nova-lista", "Nova lista"),
+      rodape: "Nova lista apaga os nomes e abre a colagem da próxima lista do grupo.",
+    }) : ""}
   `;
   filtrar("#tela-lista", ui.buscaLista);
 }
@@ -471,7 +468,6 @@ async function importarMaster() {
 const acoesClique = {
   "ir": (b) => irPara(b.dataset.tela),
   "colar-lista": colarLista,
-  "alternar-confirmado": (b) => executar(() => alternarConfirmado(estado, b.dataset.id)),
   "cadastrar-pendente": (b) => {
     const atleta = executar(() => resolverPendente(estado, b.dataset.nome, null));
     if (atleta) abrirEditor(atleta.id, `${atleta.nome} cadastrado. Defina sexo e pote.`);
@@ -480,9 +476,15 @@ const acoesClique = {
     estado.lista.pendentes = estado.lista.pendentes.filter((nome) => nome !== b.dataset.nome);
   }),
   "limpar-lista": async () => {
-    if (await confirmar("Limpar lista", "Todos ficam como não confirmados.", "Limpar")) {
+    if (await confirmar("Limpar lista", "Todos os nomes saem da lista.", "Limpar")) {
       executar(() => { estado.lista = { ids: [], pendentes: [] }; });
     }
+  },
+  "nova-lista": async () => {
+    if (!await confirmar("Nova lista", "Todos os nomes saem da lista. Em seguida, cole a lista do grupo com os 24 nomes.", "Começar")) return;
+    executar(() => { estado.lista = { ids: [], pendentes: [] }; });
+    await fecharFolha();
+    colarLista();
   },
   "sortear": () => {
     const resultado = executar(() => {
