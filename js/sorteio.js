@@ -9,6 +9,8 @@
 import { normalizarNome } from "./nomes.js";
 
 export const NIVEIS = ["C1", "LM1", "LF1", "M1", "M2", "F1", "F2"];
+// Ordem de exibição da Lista Master.
+export const POTES_ORDEM = ["C1", "M1", "M2", "LM1", "F1", "F2", "LF1"];
 export const TOTAL_ATLETAS = 24;
 const TIMES = [0, 1, 2, 3];
 

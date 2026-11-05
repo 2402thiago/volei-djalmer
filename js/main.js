@@ -1,22 +1,22 @@
-// Interface: Lista Master, Presença e Times.
+// Interface: Lista Master, Lista (confirmados), Times e Presença (chegada na quadra).
 
 import {
   carregar, salvar, adicionarAtleta, atualizarAtleta, adicionarAlias, removerAtleta, moverAtleta,
-  previaImportacao, aplicarImportacao, aplicarListaGrupo, alternarPresenca, resolverPendente,
-  presentesParaSorteio, casaisParaSorteio, encontrarAtleta,
+  previaImportacao, aplicarImportacao, aplicarListaGrupo, alternarConfirmado, resolverPendente,
+  confirmadosParaSorteio, casaisParaSorteio, encontrarAtleta, definirTimes, desfazerTimes,
+  aplicarTimesColados, alternarCheckin, chegou, zerarCheckin,
 } from "./dados.js";
-import { NIVEIS, TOTAL_ATLETAS, sortearTimes, problemasParaSortear, nomePoteSorteio } from "./sorteio.js";
-import { gerarMensagemMaster, lerMensagemMaster, extrairListaGrupo, gerarMensagemTimes } from "./mensagem.js";
+import { NIVEIS, POTES_ORDEM, TOTAL_ATLETAS, sortearTimes, problemasParaSortear, nomePoteSorteio } from "./sorteio.js";
+import { gerarMensagemMaster, lerMensagemMaster, extrairListaGrupo, gerarMensagemTimes, lerMensagemTimes } from "./mensagem.js";
 
 const CHAVE_TELA = "djalmer.tela";
+const TELAS = ["master", "lista", "times", "presenca"];
 const estado = carregar(localStorage);
 const ui = {
-  tela: localStorage.getItem(CHAVE_TELA) || "presenca",
-  filtroPote: null,
-  filtroSexo: "",
-  editando: null,
-  busca: "",
-  revelar: false,
+  tela: TELAS.includes(localStorage.getItem(CHAVE_TELA)) ? localStorage.getItem(CHAVE_TELA) : "lista",
+  buscaMaster: "",
+  buscaLista: "",
+  folha: null, // folha aberta com edição ao vivo: { tipo: "atleta", id } ou { tipo: "casais" }
 };
 
 const $ = (seletor, raiz = document) => raiz.querySelector(seletor);
@@ -25,6 +25,14 @@ const esc = (texto) => String(texto ?? "").replace(/[&<>"']/g, (c) => ({
 }[c]));
 const plural = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
 
+const ICONES = {
+  casais: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="13" r="5.5"/><circle cx="15" cy="11" r="5.5"/></svg>',
+  mais: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
+  colar: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5.5" y="4.5" width="13" height="16" rx="2"/><path d="M9 4.5h6v2.5H9zM9 11h6M9 15h4"/></svg>',
+  seta: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 6l6 6-6 6"/></svg>',
+  check: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12.5l4 4 8-9"/></svg>',
+};
+
 // ---- Infraestrutura ---------------------------------------------------
 
 function executar(acao, { renderizar = true } = {}) {
@@ -32,7 +40,7 @@ function executar(acao, { renderizar = true } = {}) {
     const resultado = acao();
     salvar(localStorage, estado);
     if (renderizar) render();
-    return resultado;
+    return resultado ?? true;
   } catch (erro) {
     avisar(erro.message, true);
     return undefined;
@@ -46,21 +54,41 @@ function avisar(texto, erro = false) {
   aviso.classList.toggle("erro", erro);
   aviso.hidden = false;
   clearTimeout(temporizadorAviso);
-  temporizadorAviso = setTimeout(() => { aviso.hidden = true; }, erro ? 6000 : 3500);
+  temporizadorAviso = setTimeout(() => { aviso.hidden = true; }, erro ? 6000 : 3000);
 }
 
-function perguntar({ titulo, conteudo, ok = "Confirmar", cancelar = "Cancelar" }) {
-  const dialogo = $("#dialogo");
-  $("#dialogo-titulo").textContent = titulo;
-  $("#dialogo-conteudo").innerHTML = conteudo;
-  $("#dialogo-ok").textContent = ok;
-  $("#dialogo-cancelar").textContent = cancelar;
+/** Abre a folha. Resolve true quando o botão de confirmar é usado. */
+function abrirFolha({ titulo, conteudo, ok = "OK", cancelar = "Cancelar", folha = null }) {
+  const dialogo = $("#folha");
+  ui.folha = folha;
+  $("#folha-titulo").textContent = titulo;
+  $("#folha-conteudo").innerHTML = conteudo;
+  $("#folha-ok").textContent = ok;
+  $("#folha-cancelar").textContent = cancelar || "";
+  $("#folha-cancelar").hidden = !cancelar;
   dialogo.returnValue = "";
   dialogo.showModal();
-  $("textarea, input", dialogo)?.focus();
+  $("textarea", dialogo)?.focus();
   return new Promise((resolver) => {
-    dialogo.addEventListener("close", () => resolver(dialogo.returnValue === "ok"), { once: true });
+    dialogo.addEventListener("close", () => {
+      ui.folha = null;
+      resolver(dialogo.returnValue === "ok");
+    }, { once: true });
   });
+}
+
+/** Fecha a folha aberta e espera o fechamento terminar. */
+function fecharFolha() {
+  const dialogo = $("#folha");
+  if (!dialogo.open) return Promise.resolve();
+  return new Promise((resolver) => {
+    dialogo.addEventListener("close", () => setTimeout(resolver), { once: true });
+    dialogo.close();
+  });
+}
+
+async function confirmar(titulo, texto, ok) {
+  return abrirFolha({ titulo, conteudo: `<p class="folha-texto">${esc(texto)}</p>`, ok });
 }
 
 async function compartilhar(texto) {
@@ -81,17 +109,28 @@ async function compartilhar(texto) {
   window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, "_blank", "noopener");
 }
 
-const rotuloSexo = (sexo) => ({ M: "Masculino", F: "Feminino" }[sexo] || "Sexo não definido");
+const opcoes = (lista, selecionado) => lista.map(([valor, rotulo]) =>
+  `<option value="${esc(valor)}" ${valor === selecionado ? "selected" : ""}>${esc(rotulo)}</option>`).join("");
+const opcoesPote = (selecionado) => opcoes([["", "Sem pote"], ...POTES_ORDEM.map((p) => [p, p])], selecionado);
+const opcoesSexo = (selecionado) => opcoes([["", "Não definido"], ["M", "Masculino"], ["F", "Feminino"]], selecionado);
 
-function opcoesPote(selecionado, vazio = "Sem pote") {
-  return [`<option value="">${vazio}</option>`, ...NIVEIS.map((pote) =>
-    `<option value="${pote}" ${pote === selecionado ? "selected" : ""}>${pote}</option>`)].join("");
-}
+const topo = (titulo, subtitulo, botoes = "") => `
+  <div class="barra">${botoes}</div>
+  <h1 class="titulo-grande">${esc(titulo)}</h1>
+  ${subtitulo ? `<p class="subtitulo">${esc(subtitulo)}</p>` : ""}`;
 
-function opcoesSexo(selecionado) {
-  return [["", "Sexo"], ["M", "M"], ["F", "F"]].map(([valor, rotulo]) =>
-    `<option value="${valor}" ${valor === selecionado ? "selected" : ""}>${rotulo}</option>`).join("");
-}
+const botaoBarra = (acao, icone, rotulo) =>
+  `<button class="botao-icone" data-acao="${acao}" aria-label="${rotulo}" title="${rotulo}">${ICONES[icone]}</button>`;
+
+const grupo = ({ cabecalho = "", rodape = "", celulas, classe = "" }) => `
+  <section class="grupo ${classe}">
+    ${cabecalho ? `<h2 class="grupo-cabecalho">${cabecalho}</h2>` : ""}
+    <ul class="celulas">${celulas}</ul>
+    ${rodape ? `<p class="grupo-rodape">${rodape}</p>` : ""}
+  </section>`;
+
+const celulaAcao = (acao, texto, { perigo = false, extra = "", desativado = false } = {}) =>
+  `<li><button class="celula celula-acao${perigo ? " perigo" : ""}" data-acao="${acao}" ${extra} ${desativado ? "disabled" : ""}>${esc(texto)}</button></li>`;
 
 // ---- Navegação --------------------------------------------------------
 
@@ -109,308 +148,376 @@ function irPara(tela) {
 
 document.querySelectorAll(".aba").forEach((aba) => aba.addEventListener("click", () => irPara(aba.dataset.tela)));
 
-// ---- Presença ---------------------------------------------------------
+// ---- Lista (confirmados do dia) --------------------------------------
 
-function situacaoPresenca() {
-  const presentes = presentesParaSorteio(estado);
-  const pendentes = estado.presenca.pendentes.length;
-  const problemas = problemasParaSortear(presentes);
-  let legenda;
-  let nivel = "falta";
-  if (pendentes) legenda = `Resolva ${plural(pendentes, "nome não encontrado", "nomes não encontrados")} antes de sortear.`;
-  else if (presentes.length < TOTAL_ATLETAS) legenda = `${TOTAL_ATLETAS - presentes.length === 1 ? "Falta 1" : `Faltam ${TOTAL_ATLETAS - presentes.length}`} para fechar os times.`;
-  else if (presentes.length > TOTAL_ATLETAS) { legenda = `${presentes.length - TOTAL_ATLETAS === 1 ? "Sobra 1" : `Sobram ${presentes.length - TOTAL_ATLETAS}`}. Desmarque para ficar com ${TOTAL_ATLETAS}.`; nivel = "sobra"; }
-  else if (problemas.length) legenda = `${plural(problemas.length, "atleta precisa", "atletas precisam")} de pote ou sexo na Lista Master.`;
-  else { legenda = "Pronto para sortear."; nivel = "pronto"; }
-  return { presentes, problemas: pendentes ? [legenda, ...problemas] : problemas, legenda, nivel };
+function situacaoLista() {
+  const confirmados = confirmadosParaSorteio(estado);
+  const pendentes = estado.lista.pendentes.length;
+  const problemas = problemasParaSortear(confirmados);
+  const n = confirmados.length;
+  let resumo = `${n} de ${TOTAL_ATLETAS} confirmados`;
+  if (n < TOTAL_ATLETAS) resumo += `, ${TOTAL_ATLETAS - n === 1 ? "falta 1" : `faltam ${TOTAL_ATLETAS - n}`}`;
+  if (n > TOTAL_ATLETAS) resumo += `, ${n - TOTAL_ATLETAS === 1 ? "sobra 1" : `sobram ${n - TOTAL_ATLETAS}`}`;
+  if (pendentes) problemas.unshift(`Resolva ${plural(pendentes, "nome não encontrado", "nomes não encontrados")} na aba Lista.`);
+  return { confirmados, resumo, problemas, pronto: !problemas.length };
 }
 
-function placar(situacao, compacto = false) {
-  return `<div class="placar placar-${situacao.nivel}${compacto ? " compacto" : ""}" role="group" aria-label="${situacao.presentes.length} de ${TOTAL_ATLETAS} presentes">
-    <span class="placar-numero">${situacao.presentes.length}</span><span class="placar-total">/${TOTAL_ATLETAS}</span>
-    <p class="placar-legenda">${esc(situacao.legenda)}</p>
-  </div>`;
-}
+function renderLista() {
+  const situacao = situacaoLista();
+  const confirmados = new Set(estado.lista.ids);
+  const celula = (atleta) => {
+    const marcado = confirmados.has(atleta.id);
+    return `<li data-busca="${esc(`${atleta.nome} ${atleta.aliases.join(" ")}`.toLowerCase())}">
+      <button class="celula celula-marcavel" data-acao="alternar-confirmado" data-id="${atleta.id}" aria-pressed="${marcado}">
+        <span class="celula-texto">${esc(atleta.nome)}</span>
+        <span class="celula-detalhe">${atleta.pote || "Sem pote"}</span>
+        <span class="marca">${marcado ? ICONES.check : ""}</span>
+      </button></li>`;
+  };
+  const marcados = estado.atletas.filter((a) => confirmados.has(a.id));
+  const outros = estado.atletas.filter((a) => !confirmados.has(a.id));
+  const opcoesVinculo = estado.atletas.map((a) => [a.id, a.nome]);
 
-function renderPresenca() {
-  const situacao = situacaoPresenca();
-  const presentes = new Set(estado.presenca.ids);
-  const linha = (atleta, indice) => `<li data-nome="${esc(atleta.nome.toLowerCase())} ${esc(atleta.aliases.join(" ").toLowerCase())}">
-    <button class="presenca${presentes.has(atleta.id) ? " marcada" : ""}" data-acao="alternar-presenca" data-id="${atleta.id}" aria-pressed="${presentes.has(atleta.id)}">
-      <span class="rank">${indice + 1}</span>
-      <span class="presenca-nome">${esc(atleta.nome)}</span>
-      <span class="pote">${atleta.pote || "?"}</span>
-    </button></li>`;
-  const comIndice = estado.atletas.map((atleta, indice) => [atleta, indice]);
-  const marcados = comIndice.filter(([a]) => presentes.has(a.id));
-  const ausentes = comIndice.filter(([a]) => !presentes.has(a.id));
-  const opcoesVinculo = estado.atletas.map((a) => `<option value="${a.id}">${esc(a.nome)}</option>`).join("");
-
-  $("#tela-presenca").innerHTML = `
-    ${placar(situacao)}
-    <details class="colar" ${estado.presenca.ids.length ? "" : "open"}>
-      <summary>Colar lista do grupo</summary>
-      <label class="rotulo" for="texto-grupo">Cole a lista de confirmados do WhatsApp. A presença atual será trocada por ela.</label>
-      <textarea id="texto-grupo" rows="6" placeholder="1. Ana ✅&#10;2. Beto&#10;..."></textarea>
-      <button class="botao primario" data-acao="marcar-grupo">Marcar presença</button>
-    </details>
-    ${estado.presenca.pendentes.length ? `<section class="bloco pendencias" aria-labelledby="titulo-pendentes">
-      <h2 id="titulo-pendentes">Não estão na Lista Master</h2>
-      <p class="nota">Escolha quem é a pessoa (o nome vira apelido dela) ou cadastre.</p>
-      <ul class="lista-pendentes">${estado.presenca.pendentes.map((nome) => `<li>
-        <span class="pendente-nome">${esc(nome)}</span>
-        <select data-acao="vincular-pendente" data-nome="${esc(nome)}" aria-label="Vincular ${esc(nome)} a um atleta"><option value="">É o atleta…</option>${opcoesVinculo}</select>
-        <button class="botao secundario" data-acao="cadastrar-pendente" data-nome="${esc(nome)}">Cadastrar</button>
-        <button class="botao fantasma" data-acao="descartar-pendente" data-nome="${esc(nome)}" aria-label="Descartar ${esc(nome)}">Descartar</button>
-      </li>`).join("")}</ul>
-    </section>` : ""}
+  $("#tela-lista").innerHTML = `
+    ${topo("Lista", situacao.resumo)}
+    ${grupo({
+      celulas: celulaAcao("colar-lista", "Colar lista do grupo"),
+      rodape: "Cole a mensagem de confirmados do WhatsApp. Ela substitui a lista atual.",
+    })}
+    ${estado.lista.pendentes.length ? grupo({
+      cabecalho: "Não estão na Lista Master",
+      classe: "pendencias",
+      rodape: "Escolha quem é a pessoa (o nome vira apelido dela) ou cadastre.",
+      celulas: estado.lista.pendentes.map((nome) => `<li class="celula celula-pendente">
+        <span class="celula-texto">${esc(nome)}</span>
+        <select data-acao="vincular-pendente" data-nome="${esc(nome)}" aria-label="Quem é ${esc(nome)}">
+          <option value="">É o atleta…</option>${opcoes(opcoesVinculo, "")}</select>
+        <span class="pendente-acoes">
+          <button class="botao-texto" data-acao="cadastrar-pendente" data-nome="${esc(nome)}">Cadastrar</button>
+          <button class="botao-texto perigo" data-acao="descartar-pendente" data-nome="${esc(nome)}">Descartar</button>
+        </span>
+      </li>`).join(""),
+    }) : ""}
     ${estado.atletas.length ? `
-      <input type="search" class="busca" id="busca-presenca" placeholder="Buscar atleta" value="${esc(ui.busca)}" aria-label="Buscar atleta" />
-      ${marcados.length ? `<h2 class="subtitulo">Presentes</h2><ul class="lista-presenca">${marcados.map(([a, i]) => linha(a, i)).join("")}</ul>` : ""}
-      ${ausentes.length ? `<h2 class="subtitulo">Ausentes</h2><ul class="lista-presenca">${ausentes.map(([a, i]) => linha(a, i)).join("")}</ul>` : ""}
-      ${estado.presenca.ids.length || estado.presenca.pendentes.length ? `<button class="botao fantasma largo" data-acao="limpar-presenca">Limpar presença</button>` : ""}
-    ` : `<p class="vazio">A Lista Master está vazia. Cadastre os atletas ou importe a lista em <button class="link" data-acao="ir" data-tela="master">Lista Master</button>.</p>`}
+      <input type="search" class="busca" id="busca-lista" placeholder="Buscar" value="${esc(ui.buscaLista)}" aria-label="Buscar atleta" />
+      ${marcados.length ? grupo({ cabecalho: "Confirmados", celulas: marcados.map(celula).join("") }) : ""}
+      ${outros.length ? grupo({ cabecalho: "Não confirmados", celulas: outros.map(celula).join("") }) : ""}
+      ${estado.lista.ids.length || estado.lista.pendentes.length ? grupo({ celulas: celulaAcao("limpar-lista", "Limpar lista", { perigo: true }) }) : ""}
+    ` : `<p class="vazio">A Lista Master está vazia. Cadastre os atletas ou importe a lista na aba Lista Master.</p>`}
   `;
-  filtrarPresenca();
+  filtrar("#tela-lista", ui.buscaLista);
 }
 
-function filtrarPresenca() {
-  const termo = ui.busca.trim().toLowerCase();
-  document.querySelectorAll(".lista-presenca li").forEach((item) => {
-    item.hidden = Boolean(termo) && !item.dataset.nome.includes(termo);
+function filtrar(tela, termo) {
+  const busca = termo.trim().toLowerCase();
+  document.querySelectorAll(`${tela} li[data-busca]`).forEach((item) => {
+    item.hidden = Boolean(busca) && !item.dataset.busca.includes(busca);
   });
+  document.querySelectorAll(`${tela} .grupo`).forEach((secao) => {
+    const itens = secao.querySelectorAll("li[data-busca]");
+    if (itens.length) secao.hidden = [...itens].every((item) => item.hidden);
+  });
+}
+
+async function colarLista() {
+  const colou = await abrirFolha({
+    titulo: "Colar lista",
+    conteudo: `<textarea id="texto-colado" rows="12" placeholder="1. Roger Silva ✅&#10;2. Ton ✅&#10;..." aria-label="Lista do grupo"></textarea>`,
+    ok: "Marcar",
+  });
+  if (!colou) return;
+  const nomes = extrairListaGrupo($("#texto-colado").value);
+  if (!nomes.length) { avisar("Nenhum nome encontrado. A lista precisa ter linhas como \"1. Nome\".", true); return; }
+  const resultado = executar(() => aplicarListaGrupo(estado, nomes));
+  if (resultado) {
+    const extra = resultado.pendentes.length ? `, ${plural(resultado.pendentes.length, "nome não encontrado", "nomes não encontrados")}` : "";
+    avisar(`${plural(resultado.marcados, "confirmado", "confirmados")}${extra}.`);
+  }
 }
 
 // ---- Times ------------------------------------------------------------
 
 function renderTimes() {
-  const situacao = situacaoPresenca();
-  const pode = !situacao.problemas.length && situacao.presentes.length === TOTAL_ATLETAS;
-  const casaisAtivos = estado.casais.lista.filter((c) => c.ativo).length;
+  const situacao = situacaoLista();
+  const pode = situacao.pronto;
   const times = estado.times;
+  const casaisAtivos = casaisParaSorteio(estado).length;
 
   $("#tela-times").innerHTML = `
-    ${pode ? "" : `${placar(situacao, true)}
-      ${situacao.problemas.length > 1 ? `<ul class="problemas">${situacao.problemas.slice(1).map((p) => `<li>${esc(p)}</li>`).join("")}</ul>` : ""}
-      <button class="botao secundario largo" data-acao="ir" data-tela="presenca">Ajustar presença</button>`}
-    <div class="controle-sorteio">
-      <label class="chave">
-        <input type="checkbox" data-acao="casais-ativado" ${estado.casais.ativado ? "checked" : ""} ${estado.casais.lista.length ? "" : "disabled"} />
-        <span class="chave-trilho" aria-hidden="true"></span>
-        <span>Manter casais juntos <span class="nota">${estado.casais.lista.length ? plural(casaisAtivos, "casal ativo", "casais ativos") : "nenhum casal cadastrado"}</span></span>
-      </label>
-      <button class="botao primario grande" data-acao="sortear" ${pode ? "" : "disabled"}>${times ? "Sortear de novo" : "Sortear times"}</button>
+    ${topo("Times", times ? plural(times.length, "time", "times") : "Nenhum time ainda", botaoBarra("colar-times", "colar", "Colar times"))}
+    ${pode ? "" : grupo({
+      cabecalho: "Ainda não dá para sortear",
+      classe: "pendencias",
+      celulas: `${situacao.problemas.map((p) => `<li class="celula"><span class="celula-texto">${esc(p)}</span></li>`).join("")}
+        ${celulaAcao("ir", "Abrir a Lista", { extra: 'data-tela="lista"' })}`,
+    })}
+    <div class="bloco-botao">
+      <button class="botao-cheio" data-acao="sortear" ${pode ? "" : "disabled"}>${times ? "Sortear de novo" : "Sortear times"}</button>
+      ${casaisAtivos ? `<p class="grupo-rodape">${plural(casaisAtivos, "casal fica junto", "casais ficam juntos")} no sorteio.</p>` : ""}
     </div>
     ${times ? `
-      <div class="grade-times${ui.revelar ? " revelar" : ""}">${times.map((time, indice) => `
-        <article class="time" style="--ordem:${indice}">
-          <h2 class="time-nome">${esc(time.nome)}</h2>
-          <ol class="time-jogadores">${time.jogadores.map((j) => {
-            const promovido = j.poteSorteio !== j.pote && !(j.poteSorteio === "levantadores" && ["LM1", "LF1"].includes(j.pote));
-            return `<li><span class="jogador-nome">${esc(j.nome)}</span>
-              <span class="sexo" title="${rotuloSexo(j.sexo)}">${j.sexo}</span>
-              <span class="pote${promovido ? " promovido" : ""}">${nomePoteSorteio(j.poteSorteio)}${promovido ? `<small>era ${j.pote}</small>` : ""}</span></li>`;
-          }).join("")}</ol>
-        </article>`).join("")}
-      </div>
-      <div class="acoes">
-        <button class="botao primario" data-acao="compartilhar-times">Enviar no WhatsApp</button>
-        ${estado.timesAnterior ? `<button class="botao secundario" data-acao="desfazer-sorteio">Desfazer sorteio</button>` : ""}
-      </div>
-    ` : (pode ? `<p class="vazio">Os 24 estão confirmados. Toque em Sortear times.</p>` : "")}
+      ${times.map((time) => grupo({
+        cabecalho: esc(time.nome),
+        celulas: time.jogadores.map((j) => {
+          const promovido = j.poteSorteio && j.pote && j.poteSorteio !== j.pote && !(j.poteSorteio === "levantadores" && ["LM1", "LF1"].includes(j.pote));
+          return `<li class="celula">
+            <span class="celula-texto">${esc(j.nome)}</span>
+            <span class="celula-detalhe">${j.poteSorteio ? nomePoteSorteio(j.poteSorteio) : "Sem pote"}${promovido ? ` (era ${j.pote})` : ""}</span>
+          </li>`;
+        }).join(""),
+      })).join("")}
+      ${grupo({ celulas: celulaAcao("compartilhar-times", "Enviar no WhatsApp") + (estado.timesAnterior ? celulaAcao("desfazer-sorteio", "Desfazer") : "") })}
+    ` : `<p class="vazio">Sorteie os times ou cole a mensagem de times do WhatsApp.</p>`}
   `;
-  ui.revelar = false;
 }
 
-function sortear() {
-  const { times, casaisAusentes } = sortearTimes(presentesParaSorteio(estado), { casais: casaisParaSorteio(estado) });
-  estado.timesAnterior = estado.times;
-  estado.times = times;
-  if (casaisAusentes.length) avisar(`Casais sem os dois presentes: ${casaisAusentes.join(", ")}.`);
-  else avisar("Times sorteados.");
-  ui.revelar = true;
+async function colarTimes() {
+  const colou = await abrirFolha({
+    titulo: "Colar times",
+    conteudo: `<textarea id="texto-colado" rows="14" placeholder="*Times - Vôlei Djalmer*&#10;&#10;*Time Fulano*&#10;1. Nome&#10;..." aria-label="Mensagem de times"></textarea>
+      <p class="folha-texto">Os times atuais, a lista de confirmados e a presença serão trocados pelos da mensagem.</p>`,
+    ok: "Usar times",
+  });
+  if (!colou) return;
+  let lidos;
+  try { lidos = lerMensagemTimes($("#texto-colado").value); } catch (erro) { avisar(erro.message, true); return; }
+  const resultado = executar(() => aplicarTimesColados(estado, lidos));
+  if (!resultado) return;
+  const extra = resultado.pendentes.length ? ` ${plural(resultado.pendentes.length, "nome não está", "nomes não estão")} na Lista Master: resolva na aba Lista.` : "";
+  avisar(`${plural(resultado.times, "time carregado", "times carregados")}.${extra}`, Boolean(resultado.pendentes.length));
+}
+
+// ---- Presença (chegada na quadra) ------------------------------------
+
+function renderPresenca() {
+  const times = estado.times;
+  if (!times) {
+    $("#tela-presenca").innerHTML = `${topo("Presença", "")}
+      <p class="vazio">Sorteie ou cole os times para marcar quem chegou.</p>
+      ${grupo({ celulas: celulaAcao("ir", "Abrir Times", { extra: 'data-tela="times"' }) })}`;
+    return;
+  }
+  const total = times.reduce((s, t) => s + t.jogadores.length, 0);
+  const chegaram = times.reduce((s, t) => s + t.jogadores.filter((j) => chegou(estado, j)).length, 0);
+  $("#tela-presenca").innerHTML = `
+    ${topo("Presença", `${chegaram} de ${total} chegaram`)}
+    ${times.map((time, indice) => {
+      const posicao = estado.checkin.ordem.indexOf(indice);
+      const presentes = time.jogadores.filter((j) => chegou(estado, j)).length;
+      return `<section class="grupo time-presenca${posicao >= 0 ? " completo" : ""}">
+        <h2 class="grupo-cabecalho cabecalho-time">
+          ${posicao >= 0 ? `<span class="ordem-quadra" aria-label="${posicao + 1}º em quadra">${posicao + 1}º</span>` : ""}
+          <span class="nome-time">${esc(time.nome)}</span>
+          <span class="estado-time">${posicao >= 0 ? "em quadra" : `${presentes} de ${time.jogadores.length}`}</span>
+        </h2>
+        <ul class="celulas">${time.jogadores.map((j, i) => {
+          const marcado = chegou(estado, j);
+          return `<li><button class="celula celula-checkin" data-acao="checkin" data-time="${indice}" data-jogador="${i}" aria-pressed="${marcado}">
+            <span class="circulo">${marcado ? ICONES.check : ""}</span>
+            <span class="celula-texto">${esc(j.nome)}</span>
+          </button></li>`;
+        }).join("")}</ul>
+      </section>`;
+    }).join("")}
+    ${estado.checkin.ids.length ? grupo({ celulas: celulaAcao("zerar-presenca", "Zerar presença", { perigo: true }) }) : ""}
+  `;
 }
 
 // ---- Lista Master -----------------------------------------------------
 
-function atletasVisiveis() {
-  return estado.atletas
-    .map((atleta, indice) => ({ atleta, indice }))
-    .filter(({ atleta }) => (ui.filtroPote === null || atleta.pote === ui.filtroPote || atleta.potesAdicionais.includes(ui.filtroPote))
-      && (!ui.filtroSexo || atleta.sexo === ui.filtroSexo));
-}
-
-function editorAtleta(atleta) {
-  const adicionais = NIVEIS.filter((pote) => pote !== atleta.pote).map((pote) => `
-    <label class="marcador"><input type="checkbox" data-acao="adicional" data-id="${atleta.id}" value="${pote}" ${atleta.potesAdicionais.includes(pote) ? "checked" : ""} /><span>${pote}</span></label>`).join("");
-  return `<div class="editor">
-    <label class="rotulo">Nome<input data-acao="editar-campo" data-campo="nome" data-id="${atleta.id}" value="${esc(atleta.nome)}" maxlength="80" /></label>
-    <div class="linha">
-      <label class="rotulo">Sexo<select data-acao="editar-campo" data-campo="sexo" data-id="${atleta.id}">${opcoesSexo(atleta.sexo)}</select></label>
-      <label class="rotulo">Pote principal<select data-acao="editar-campo" data-campo="pote" data-id="${atleta.id}">${opcoesPote(atleta.pote)}</select></label>
-    </div>
-    <fieldset class="adicionais"><legend>Também pode jogar como</legend>${adicionais}</fieldset>
-    <div class="apelidos">
-      <span class="rotulo">Outros nomes na lista do grupo</span>
-      <div class="fichas">${atleta.aliases.map((alias, i) => `<span class="ficha">${esc(alias)}<button data-acao="remover-alias" data-id="${atleta.id}" data-indice="${i}" aria-label="Remover ${esc(alias)}">×</button></span>`).join("") || `<span class="nota">Nenhum</span>`}</div>
-      <div class="linha"><input id="novo-alias" placeholder="Ex.: Joãozinho" aria-label="Novo apelido" /><button class="botao secundario" data-acao="adicionar-alias" data-id="${atleta.id}">Adicionar</button></div>
-    </div>
-    <div class="acoes">
-      <button class="botao perigo" data-acao="excluir-atleta" data-id="${atleta.id}">Excluir atleta</button>
-      <button class="botao secundario" data-acao="fechar-editor">Fechar</button>
-    </div>
-  </div>`;
-}
+const detalheAtleta = (atleta) => [
+  atleta.sexo || "Sexo?",
+  ...atleta.potesAdicionais.map((p) => `+${p}`),
+].join(" ");
 
 function renderMaster() {
-  const visiveis = atletasVisiveis();
-  const filtroPote = (valor, rotulo) => `<button class="filtro" data-acao="filtro-pote" data-valor="${valor ?? "todos"}" aria-pressed="${ui.filtroPote === valor}">${rotulo}</button>`;
-  const filtroSexo = (valor, rotulo) => `<button class="filtro" data-acao="filtro-sexo" data-valor="${valor}" aria-pressed="${ui.filtroSexo === valor}">${rotulo}</button>`;
-  const opcoesCasal = estado.atletas.map((a) => `<option value="${esc(a.nome)}">${esc(a.nome)}</option>`).join("");
+  const grupos = [...POTES_ORDEM, ""].map((pote) => ({ pote, atletas: estado.atletas.filter((a) => a.pote === pote) }))
+    .filter((g) => g.atletas.length);
+  const casais = estado.casais.ativado ? casaisParaSorteio(estado).length : 0;
 
   $("#tela-master").innerHTML = `
-    <div class="cabecalho-tela">
-      <h2>Lista Master</h2>
-      <p class="nota">${plural(estado.atletas.length, "atleta", "atletas")}. A ordem da lista é o ranking.</p>
-    </div>
-    <div class="acoes">
-      <button class="botao primario" data-acao="exportar" ${estado.atletas.length ? "" : "disabled"}>Exportar lista</button>
-      <button class="botao secundario" data-acao="importar">Importar lista</button>
-    </div>
-
-    <form class="novo-atleta" data-acao="novo-atleta">
-      <input name="nome" placeholder="Nome do atleta" aria-label="Nome do atleta" maxlength="80" required />
-      <select name="sexo" aria-label="Sexo">${opcoesSexo("")}</select>
-      <select name="pote" aria-label="Pote principal">${opcoesPote("", "Pote")}</select>
-      <button class="botao secundario">Adicionar</button>
-    </form>
-
-    <div class="filtros" role="group" aria-label="Filtrar por pote">
-      ${filtroPote(null, "Todos")}${NIVEIS.map((p) => filtroPote(p, p)).join("")}${filtroPote("", "Sem pote")}
-    </div>
-    <div class="filtros" role="group" aria-label="Filtrar por sexo">
-      ${filtroSexo("", "M e F")}${filtroSexo("M", "M")}${filtroSexo("F", "F")}
-    </div>
-
-    ${visiveis.length ? `<ol class="lista-master">${visiveis.map(({ atleta, indice }, posicao) => `
-      <li class="atleta${ui.editando === atleta.id ? " editando" : ""}" data-id="${atleta.id}">
-        <div class="atleta-linha">
-          <span class="alca" data-alca title="Arraste para mudar o ranking" aria-hidden="true"></span>
-          <span class="rank">${indice + 1}</span>
-          <button class="atleta-info" data-acao="editar" data-id="${atleta.id}" aria-expanded="${ui.editando === atleta.id}">
-            <span class="atleta-nome">${esc(atleta.nome)}</span>
-            <span class="atleta-meta">
-              <span class="sexo${atleta.sexo ? "" : " faltando"}" title="${rotuloSexo(atleta.sexo)}">${atleta.sexo || "?"}</span>
-              <span class="pote${atleta.pote ? "" : " faltando"}">${atleta.pote || "sem pote"}</span>
-              ${atleta.potesAdicionais.map((p) => `<span class="pote extra">+${p}</span>`).join("")}
+    ${topo("Lista Master", plural(estado.atletas.length, "atleta", "atletas"),
+      `${botaoBarra("abrir-casais", "casais", `Casais${casais ? `, ${plural(casais, "ativo", "ativos")}` : ""}`)}${botaoBarra("novo-atleta", "mais", "Adicionar atleta")}`)}
+    ${grupo({ celulas: celulaAcao("exportar", "Exportar lista", { desativado: !estado.atletas.length }) + celulaAcao("importar", "Importar lista") })}
+    ${estado.atletas.length ? `
+      <input type="search" class="busca" id="busca-master" placeholder="Buscar" value="${esc(ui.buscaMaster)}" aria-label="Buscar atleta" />
+      ${grupos.map(({ pote, atletas }) => grupo({
+        cabecalho: `${pote || "Sem pote"} <span class="contagem">${atletas.length}</span>`,
+        classe: "grupo-pote",
+        celulas: atletas.map((atleta, posicao) => `<li class="atleta" data-id="${atleta.id}" data-busca="${esc(`${atleta.nome} ${atleta.aliases.join(" ")}`.toLowerCase())}">
+          <div class="celula celula-atleta">
+            <span class="alca" data-alca title="Arraste para mudar o ranking" aria-hidden="true"></span>
+            <span class="rank">${posicao + 1}</span>
+            <button class="atleta-abrir" data-acao="editar" data-id="${atleta.id}">
+              <span class="celula-texto">${esc(atleta.nome)}</span>
+              <span class="celula-subtexto${atleta.sexo ? "" : " alerta"}">${esc(detalheAtleta(atleta))}</span>
+            </button>
+            <span class="ordem">
+              <button data-acao="mover" data-direcao="-1" data-id="${atleta.id}" aria-label="Subir ${esc(atleta.nome)}" ${posicao === 0 ? "disabled" : ""}>${ICONES.seta}</button>
+              <button data-acao="mover" data-direcao="1" data-id="${atleta.id}" aria-label="Descer ${esc(atleta.nome)}" ${posicao === atletas.length - 1 ? "disabled" : ""}>${ICONES.seta}</button>
             </span>
-          </button>
-          <span class="ordem">
-            <button data-acao="mover" data-direcao="-1" data-id="${atleta.id}" aria-label="Subir ${esc(atleta.nome)}" ${posicao === 0 ? "disabled" : ""}>▲</button>
-            <button data-acao="mover" data-direcao="1" data-id="${atleta.id}" aria-label="Descer ${esc(atleta.nome)}" ${posicao === visiveis.length - 1 ? "disabled" : ""}>▼</button>
-          </span>
-        </div>
-        ${ui.editando === atleta.id ? editorAtleta(atleta) : ""}
-      </li>`).join("")}</ol>`
-    : `<p class="vazio">${estado.atletas.length ? "Nenhum atleta neste filtro." : "Nenhum atleta ainda. Adicione acima ou importe a mensagem da Lista Master."}</p>`}
-
-    <section class="bloco casais" aria-labelledby="titulo-casais">
-      <h2 id="titulo-casais">Casais</h2>
-      <p class="nota">Com "Manter casais juntos" ligado na tela Times, cada casal ativo cai no mesmo time.</p>
-      ${estado.casais.lista.length ? `<ul class="lista-casais">${estado.casais.lista.map((casal, i) => `<li>
-        <label class="chave">
-          <input type="checkbox" data-acao="casal-ativo" data-indice="${i}" ${casal.ativo ? "checked" : ""} />
-          <span class="chave-trilho" aria-hidden="true"></span>
-          <span>${esc(casal.a)} &amp; ${esc(casal.b)}${encontrarAtleta(estado.atletas, casal.a) && encontrarAtleta(estado.atletas, casal.b) ? "" : ` <span class="nota alerta">fora da lista</span>`}</span>
-        </label>
-        <button class="botao fantasma" data-acao="remover-casal" data-indice="${i}" aria-label="Remover casal ${esc(casal.a)} e ${esc(casal.b)}">Remover</button>
-      </li>`).join("")}</ul>` : ""}
-      ${estado.atletas.length >= 2 ? `<form class="novo-casal" data-acao="novo-casal">
-        <select name="a" aria-label="Primeira pessoa do casal" required><option value="">Pessoa 1</option>${opcoesCasal}</select>
-        <select name="b" aria-label="Segunda pessoa do casal" required><option value="">Pessoa 2</option>${opcoesCasal}</select>
-        <button class="botao secundario">Adicionar casal</button>
-      </form>` : ""}
-    </section>
+          </div></li>`).join(""),
+      })).join("")}
+      <p class="grupo-rodape solto">A ordem dentro de cada pote é o ranking. Arraste pela alça ou use as setas.</p>
+    ` : `<p class="vazio">Nenhum atleta ainda. Toque em + para adicionar ou importe a mensagem da Lista Master.</p>`}
   `;
+  filtrar("#tela-master", ui.buscaMaster);
+}
+
+function conteudoAtleta(atleta) {
+  const adicionais = POTES_ORDEM.filter((pote) => pote !== atleta.pote).map((pote) => `
+    <label class="ficha-opcao"><input type="checkbox" data-acao="adicional" data-id="${atleta.id}" value="${pote}" ${atleta.potesAdicionais.includes(pote) ? "checked" : ""} /><span>${pote}</span></label>`).join("");
+  return `
+    ${grupo({ celulas: `
+      <li class="celula celula-campo"><label for="campo-nome">Nome</label><input id="campo-nome" data-acao="editar-campo" data-campo="nome" data-id="${atleta.id}" value="${esc(atleta.nome)}" maxlength="80" /></li>
+      <li class="celula celula-campo"><label for="campo-sexo">Sexo</label><select id="campo-sexo" data-acao="editar-campo" data-campo="sexo" data-id="${atleta.id}">${opcoesSexo(atleta.sexo)}</select></li>
+      <li class="celula celula-campo"><label for="campo-pote">Pote</label><select id="campo-pote" data-acao="editar-campo" data-campo="pote" data-id="${atleta.id}">${opcoesPote(atleta.pote)}</select></li>` })}
+    <section class="grupo">
+      <h2 class="grupo-cabecalho">Também pode jogar como</h2>
+      <div class="fichas">${adicionais}</div>
+    </section>
+    ${grupo({
+      cabecalho: "Outros nomes na lista do grupo",
+      celulas: `${atleta.aliases.map((alias, i) => `<li class="celula"><span class="celula-texto">${esc(alias)}</span>
+          <button class="botao-texto perigo" data-acao="remover-alias" data-id="${atleta.id}" data-indice="${i}">Remover</button></li>`).join("")}
+        <li class="celula celula-campo"><input id="novo-alias" placeholder="Novo apelido" aria-label="Novo apelido" />
+          <button class="botao-texto" data-acao="adicionar-alias" data-id="${atleta.id}">Adicionar</button></li>`,
+    })}
+    ${grupo({ celulas: celulaAcao("excluir-atleta", "Excluir atleta", { perigo: true, extra: `data-id="${atleta.id}"` }) })}`;
+}
+
+function conteudoCasais() {
+  const nomes = estado.atletas.map((a) => [a.nome, a.nome]);
+  return `
+    ${grupo({
+      celulas: `<li class="celula"><label class="chave"><span class="celula-texto">Manter casais juntos</span>
+        <input type="checkbox" role="switch" data-acao="casais-ativado" ${estado.casais.ativado ? "checked" : ""} /></label></li>`,
+      rodape: "Ligado, cada casal ativo cai no mesmo time no sorteio.",
+    })}
+    ${estado.casais.lista.length ? grupo({
+      cabecalho: "Casais",
+      celulas: estado.casais.lista.map((casal, i) => `<li class="celula">
+        <label class="chave"><span class="celula-texto">${esc(casal.a)} e ${esc(casal.b)}${encontrarAtleta(estado.atletas, casal.a) && encontrarAtleta(estado.atletas, casal.b) ? "" : ' <span class="celula-subtexto alerta">fora da lista</span>'}</span>
+          <input type="checkbox" role="switch" data-acao="casal-ativo" data-indice="${i}" ${casal.ativo ? "checked" : ""} aria-label="Casal ativo" /></label>
+        <button class="botao-texto perigo" data-acao="remover-casal" data-indice="${i}">Remover</button></li>`).join(""),
+    }) : ""}
+    ${estado.atletas.length >= 2 ? grupo({
+      cabecalho: "Novo casal",
+      celulas: `<li class="celula celula-campo"><label for="casal-a">Pessoa 1</label><select id="casal-a">${opcoes([["", "Escolha"], ...nomes], "")}</select></li>
+        <li class="celula celula-campo"><label for="casal-b">Pessoa 2</label><select id="casal-b">${opcoes([["", "Escolha"], ...nomes], "")}</select></li>
+        ${celulaAcao("adicionar-casal", "Adicionar casal")}`,
+    }) : ""}`;
+}
+
+/** Atualiza o conteúdo da folha aberta depois de uma alteração. */
+function renderFolha() {
+  if (!ui.folha) return;
+  const conteudo = $("#folha-conteudo");
+  const focado = document.activeElement?.id;
+  if (ui.folha.tipo === "casais") conteudo.innerHTML = conteudoCasais();
+  if (ui.folha.tipo === "atleta") {
+    const atleta = estado.atletas.find((a) => a.id === ui.folha.id);
+    if (atleta) conteudo.innerHTML = conteudoAtleta(atleta);
+    else fecharFolha();
+  }
+  if (focado) document.getElementById(focado)?.focus();
+}
+
+async function novoAtleta() {
+  const salvarNovo = await abrirFolha({
+    titulo: "Novo atleta",
+    conteudo: grupo({ celulas: `
+      <li class="celula celula-campo"><label for="novo-nome">Nome</label><input id="novo-nome" maxlength="80" autocomplete="off" /></li>
+      <li class="celula celula-campo"><label for="novo-sexo">Sexo</label><select id="novo-sexo">${opcoesSexo("")}</select></li>
+      <li class="celula celula-campo"><label for="novo-pote">Pote</label><select id="novo-pote">${opcoesPote("")}</select></li>` }),
+    ok: "Adicionar",
+  });
+  if (!salvarNovo) return;
+  const dados = { nome: $("#novo-nome").value, sexo: $("#novo-sexo").value, pote: $("#novo-pote").value };
+  const atleta = executar(() => adicionarAtleta(estado, dados));
+  if (atleta) avisar(`${atleta.nome} entrou no fim do grupo ${atleta.pote || "Sem pote"}.`);
 }
 
 async function importarMaster() {
-  const colou = await perguntar({
-    titulo: "Importar Lista Master",
-    conteudo: `<label class="rotulo" for="texto-master">Cole a mensagem gerada por "Exportar lista".</label>
-      <textarea id="texto-master" rows="10" placeholder="*Lista Master - Vôlei Djalmer*"></textarea>`,
-    ok: "Ver prévia",
+  const colou = await abrirFolha({
+    titulo: "Importar lista",
+    conteudo: `<textarea id="texto-colado" rows="14" placeholder="*Lista Master - Vôlei Djalmer*" aria-label="Mensagem da Lista Master"></textarea>
+      <p class="folha-texto">Cole a mensagem gerada por Exportar lista.</p>`,
+    ok: "Continuar",
   });
   if (!colou) return;
   let lido;
-  try { lido = lerMensagemMaster($("#texto-master").value); } catch (erro) { avisar(erro.message, true); return; }
+  try { lido = lerMensagemMaster($("#texto-colado").value); } catch (erro) { avisar(erro.message, true); return; }
   const previa = previaImportacao(estado, lido);
   if (previa.repetidos.length) { avisar(`Nomes repetidos na mensagem: ${[...new Set(previa.repetidos)].join(", ")}.`, true); return; }
-  const listar = (nomes) => nomes.length ? `<span class="nota">${nomes.map(esc).join(", ")}</span>` : "";
-  const confirmou = await perguntar({
-    titulo: "Substituir a Lista Master?",
-    conteudo: `<ul class="previa">
-      <li><strong>${previa.total}</strong> ${previa.total === 1 ? "atleta" : "atletas"} na mensagem</li>
-      <li><strong>${previa.novos.length}</strong> ${previa.novos.length === 1 ? "novo" : "novos"} ${listar(previa.novos)}</li>
-      <li><strong>${previa.removidos.length}</strong> ${previa.removidos.length === 1 ? "sai" : "saem"} da lista ${listar(previa.removidos)}</li>
-      <li><strong>${previa.casais}</strong> ${previa.casais === 1 ? "casal" : "casais"}</li>
-    </ul><p class="nota">A lista atual será trocada pela da mensagem.</p>`,
-    ok: "Substituir lista",
+  const linha = (rotulo, nomes) => `<li class="celula"><span class="celula-texto">${rotulo}</span><span class="celula-detalhe">${nomes.length}</span></li>
+    ${nomes.length ? `<li class="celula"><span class="celula-subtexto">${nomes.map(esc).join(", ")}</span></li>` : ""}`;
+  const substituir = await abrirFolha({
+    titulo: "Substituir lista",
+    conteudo: grupo({
+      celulas: `<li class="celula"><span class="celula-texto">Atletas na mensagem</span><span class="celula-detalhe">${previa.total}</span></li>
+        ${linha("Novos", previa.novos)}${linha("Saem da lista", previa.removidos)}
+        <li class="celula"><span class="celula-texto">Casais</span><span class="celula-detalhe">${previa.casais}</span></li>`,
+      rodape: "A Lista Master atual será trocada pela da mensagem.",
+    }),
+    ok: "Substituir",
   });
-  if (!confirmou) return;
-  executar(() => aplicarImportacao(estado, lido));
-  avisar(`Lista Master importada: ${plural(previa.total, "atleta", "atletas")}.`);
+  if (!substituir) return;
+  if (executar(() => aplicarImportacao(estado, lido))) avisar(`Lista importada: ${plural(previa.total, "atleta", "atletas")}.`);
 }
 
 // ---- Eventos ----------------------------------------------------------
 
 const acoesClique = {
   "ir": (b) => irPara(b.dataset.tela),
-  "alternar-presenca": (b) => executar(() => alternarPresenca(estado, b.dataset.id)),
-  "marcar-grupo": () => {
-    const nomes = extrairListaGrupo($("#texto-grupo").value);
-    if (!nomes.length) { avisar("Nenhum nome encontrado. A lista precisa ter linhas como \"1. Nome\".", true); return; }
-    const resultado = executar(() => aplicarListaGrupo(estado, nomes));
-    if (resultado) avisar(`${plural(resultado.marcados, "presença marcada", "presenças marcadas")}${resultado.pendentes.length ? `, ${plural(resultado.pendentes.length, "nome não encontrado", "nomes não encontrados")}` : ""}.`);
-  },
+  "colar-lista": colarLista,
+  "alternar-confirmado": (b) => executar(() => alternarConfirmado(estado, b.dataset.id)),
   "cadastrar-pendente": (b) => {
-    const atleta = executar(() => resolverPendente(estado, b.dataset.nome, null), { renderizar: false });
-    if (!atleta) return;
-    ui.editando = atleta.id;
-    ui.filtroPote = null;
-    ui.filtroSexo = "";
-    irPara("master");
-    avisar(`${atleta.nome} cadastrado. Defina sexo e pote.`);
+    const atleta = executar(() => resolverPendente(estado, b.dataset.nome, null));
+    if (atleta) abrirEditor(atleta.id, `${atleta.nome} cadastrado. Defina sexo e pote.`);
   },
   "descartar-pendente": (b) => executar(() => {
-    estado.presenca.pendentes = estado.presenca.pendentes.filter((nome) => nome !== b.dataset.nome);
+    estado.lista.pendentes = estado.lista.pendentes.filter((nome) => nome !== b.dataset.nome);
   }),
-  "limpar-presenca": async () => {
-    if (await perguntar({ titulo: "Limpar presença?", conteudo: "<p>Todos ficam como ausentes.</p>", ok: "Limpar" })) {
-      executar(() => { estado.presenca = { ids: [], pendentes: [] }; });
+  "limpar-lista": async () => {
+    if (await confirmar("Limpar lista", "Todos ficam como não confirmados.", "Limpar")) {
+      executar(() => { estado.lista = { ids: [], pendentes: [] }; });
     }
   },
-  "sortear": () => executar(sortear),
-  "desfazer-sorteio": () => executar(() => {
-    estado.times = estado.timesAnterior;
-    estado.timesAnterior = null;
-    avisar("Sorteio anterior restaurado.");
-  }),
+  "sortear": () => {
+    const resultado = executar(() => {
+      const { times, casaisAusentes } = sortearTimes(confirmadosParaSorteio(estado), { casais: casaisParaSorteio(estado) });
+      definirTimes(estado, times);
+      return { casaisAusentes };
+    });
+    if (!resultado) return;
+    avisar(resultado.casaisAusentes.length ? `Casais sem os dois confirmados: ${resultado.casaisAusentes.join(", ")}.` : "Times sorteados.");
+  },
+  "colar-times": colarTimes,
+  "desfazer-sorteio": () => { if (executar(() => desfazerTimes(estado))) avisar("Times anteriores restaurados."); },
   "compartilhar-times": () => compartilhar(gerarMensagemTimes(estado.times)),
+  "checkin": (b) => executar(() => alternarCheckin(estado, estado.times[b.dataset.time].jogadores[b.dataset.jogador])),
+  "zerar-presenca": async () => {
+    if (await confirmar("Zerar presença", "Todos voltam a não ter chegado e a ordem em quadra é apagada.", "Zerar")) {
+      executar(() => zerarCheckin(estado));
+    }
+  },
   "exportar": () => compartilhar(gerarMensagemMaster(estado.atletas, estado.casais.lista)),
   "importar": importarMaster,
-  "filtro-pote": (b) => { ui.filtroPote = b.dataset.valor === "todos" ? null : b.dataset.valor; render(); },
-  "filtro-sexo": (b) => { ui.filtroSexo = b.dataset.valor; render(); },
-  "editar": (b) => { ui.editando = ui.editando === b.dataset.id ? null : b.dataset.id; render(); },
-  "fechar-editor": () => { ui.editando = null; render(); },
+  "novo-atleta": novoAtleta,
+  "abrir-casais": async () => {
+    await abrirFolha({ titulo: "Casais", conteudo: conteudoCasais(), ok: "OK", cancelar: null, folha: { tipo: "casais" } });
+    render();
+  },
+  "editar": (b) => abrirEditor(b.dataset.id),
   "mover": (b) => {
-    const visiveis = atletasVisiveis();
-    const posicao = visiveis.findIndex(({ atleta }) => atleta.id === b.dataset.id);
-    const vizinho = visiveis[posicao + Number(b.dataset.direcao)];
+    const atleta = estado.atletas.find((a) => a.id === b.dataset.id);
+    const doPote = estado.atletas.filter((a) => a.pote === atleta.pote);
+    const vizinho = doPote[doPote.indexOf(atleta) + Number(b.dataset.direcao)];
     if (!vizinho) return;
-    executar(() => moverAtleta(estado, b.dataset.id, vizinho.atleta.id));
-    const mesmo = $(`[data-acao="mover"][data-direcao="${b.dataset.direcao}"][data-id="${b.dataset.id}"]`);
-    (mesmo && !mesmo.disabled ? mesmo : $(`[data-acao="mover"][data-id="${b.dataset.id}"]:not([disabled])`))?.focus();
+    executar(() => moverAtleta(estado, atleta.id, vizinho.id));
+    const mesmo = $(`[data-acao="mover"][data-direcao="${b.dataset.direcao}"][data-id="${atleta.id}"]`);
+    (mesmo && !mesmo.disabled ? mesmo : $(`[data-acao="mover"][data-id="${atleta.id}"]:not([disabled])`))?.focus();
   },
   "adicionar-alias": (b) => executar(() => { adicionarAlias(estado, b.dataset.id, $("#novo-alias").value); }),
   "remover-alias": (b) => executar(() => {
@@ -419,13 +526,30 @@ const acoesClique = {
   "excluir-atleta": async (b) => {
     const atleta = estado.atletas.find((a) => a.id === b.dataset.id);
     if (!atleta) return;
-    if (await perguntar({ titulo: `Excluir ${atleta.nome}?`, conteudo: "<p>O atleta sai da Lista Master e da presença.</p>", ok: "Excluir" })) {
-      ui.editando = null;
+    await fecharFolha();
+    if (await confirmar(`Excluir ${atleta.nome}`, "O atleta sai da Lista Master e da lista de confirmados.", "Excluir")) {
       executar(() => removerAtleta(estado, atleta.id));
     }
   },
   "remover-casal": (b) => executar(() => { estado.casais.lista.splice(Number(b.dataset.indice), 1); }),
+  "adicionar-casal": () => executar(() => {
+    const a = $("#casal-a").value;
+    const b = $("#casal-b").value;
+    if (!a || !b) throw new Error("Escolha as duas pessoas do casal.");
+    if (a === b) throw new Error("Escolha duas pessoas diferentes.");
+    const ocupado = estado.casais.lista.find((c) => [c.a, c.b].includes(a) || [c.a, c.b].includes(b));
+    if (ocupado) throw new Error(`${ocupado.a} e ${ocupado.b} já formam um casal.`);
+    estado.casais.lista.push({ a, b, ativo: true });
+  }),
 };
+
+async function abrirEditor(id, aviso) {
+  const atleta = estado.atletas.find((a) => a.id === id);
+  if (!atleta) return;
+  if (aviso) avisar(aviso);
+  await abrirFolha({ titulo: "Atleta", conteudo: conteudoAtleta(atleta), ok: "OK", cancelar: null, folha: { tipo: "atleta", id } });
+  render();
+}
 
 const acoesMudanca = {
   "vincular-pendente": (el) => {
@@ -437,76 +561,51 @@ const acoesMudanca = {
   "casal-ativo": (el) => executar(() => { estado.casais.lista[Number(el.dataset.indice)].ativo = el.checked; }),
   "editar-campo": (el) => executar(() => atualizarAtleta(estado, el.dataset.id, { [el.dataset.campo]: el.value })),
   "adicional": (el) => executar(() => {
-    const atleta = estado.atletas.find((a) => a.id === el.dataset.id);
     const marcados = [...document.querySelectorAll(`[data-acao="adicional"][data-id="${el.dataset.id}"]:checked`)].map((c) => c.value);
-    atualizarAtleta(estado, atleta.id, { potesAdicionais: NIVEIS.filter((p) => marcados.includes(p)) });
+    atualizarAtleta(estado, el.dataset.id, { potesAdicionais: NIVEIS.filter((p) => marcados.includes(p)) });
   }),
 };
 
-const acoesFormulario = {
-  "novo-atleta": (form) => {
-    const dados = Object.fromEntries(new FormData(form));
-    if (executar(() => adicionarAtleta(estado, dados), { renderizar: false })) {
-      render();
-      avisar(`${dados.nome.trim()} entrou no fim da lista.`);
-      $(".novo-atleta input[name=nome]")?.focus();
-    }
-  },
-  "novo-casal": (form) => {
-    const { a, b } = Object.fromEntries(new FormData(form));
-    executar(() => {
-      if (a === b) throw new Error("Escolha duas pessoas diferentes.");
-      const ocupado = estado.casais.lista.find((c) => [c.a, c.b].includes(a) || [c.a, c.b].includes(b));
-      if (ocupado) throw new Error(`${ocupado.a} e ${ocupado.b} já formam um casal.`);
-      estado.casais.lista.push({ a, b, ativo: true });
-    });
-  },
-};
-
-const main = $("main");
-main.addEventListener("click", (evento) => {
+document.addEventListener("click", (evento) => {
   const botao = evento.target.closest("button[data-acao]");
-  if (botao && acoesClique[botao.dataset.acao]) acoesClique[botao.dataset.acao](botao);
+  if (!botao || !acoesClique[botao.dataset.acao]) return;
+  evento.preventDefault();
+  acoesClique[botao.dataset.acao](botao);
 });
-main.addEventListener("change", (evento) => {
+document.addEventListener("change", (evento) => {
   const el = evento.target.closest("[data-acao]");
   if (el && acoesMudanca[el.dataset.acao]) acoesMudanca[el.dataset.acao](el);
 });
-main.addEventListener("submit", (evento) => {
-  const form = evento.target.closest("form[data-acao]");
-  if (!form) return;
-  evento.preventDefault();
-  acoesFormulario[form.dataset.acao]?.(form);
+document.addEventListener("input", (evento) => {
+  if (evento.target.id === "busca-lista") { ui.buscaLista = evento.target.value; filtrar("#tela-lista", ui.buscaLista); }
+  if (evento.target.id === "busca-master") { ui.buscaMaster = evento.target.value; filtrar("#tela-master", ui.buscaMaster); }
 });
-main.addEventListener("input", (evento) => {
-  if (evento.target.id !== "busca-presenca") return;
-  ui.busca = evento.target.value;
-  filtrarPresenca();
-});
-main.addEventListener("keydown", (evento) => {
-  if (evento.key === "Enter" && evento.target.id === "novo-alias") {
-    evento.preventDefault();
-    $("[data-acao=adicionar-alias]")?.click();
-  }
+document.addEventListener("keydown", (evento) => {
+  if (evento.key !== "Enter") return;
+  if (evento.target.id === "novo-alias") { evento.preventDefault(); $("[data-acao=adicionar-alias]")?.click(); }
+  if (evento.target.id === "campo-nome") { evento.preventDefault(); evento.target.blur(); return; }
+  // Enter num campo da folha confirma (sem isso o navegador usaria o primeiro botão: Cancelar).
+  if (evento.target.matches("#folha input")) { evento.preventDefault(); $("#folha-ok").click(); }
 });
 
-// Arrastar pela alça (funciona com dedo e mouse).
+// Arrastar pela alça (dedo ou mouse), só dentro do mesmo pote.
 let arrasto = null;
-main.addEventListener("pointerdown", (evento) => {
+document.addEventListener("pointerdown", (evento) => {
   const alca = evento.target.closest("[data-alca]");
   if (!alca) return;
   evento.preventDefault();
   const item = alca.closest("li.atleta");
-  arrasto = { id: item.dataset.id, item, alvo: null };
+  arrasto = { id: item.dataset.id, item, alvo: null, grupo: item.closest(".grupo") };
   item.classList.add("arrastando");
   alca.setPointerCapture(evento.pointerId);
 });
-main.addEventListener("pointermove", (evento) => {
+document.addEventListener("pointermove", (evento) => {
   if (!arrasto) return;
-  const alvo = document.elementFromPoint(evento.clientX, evento.clientY)?.closest("li.atleta");
+  const sob = document.elementFromPoint(evento.clientX, evento.clientY)?.closest("li.atleta");
+  const alvo = sob && sob !== arrasto.item && sob.closest(".grupo") === arrasto.grupo ? sob : null;
   if (arrasto.alvo && arrasto.alvo !== alvo) arrasto.alvo.classList.remove("alvo");
-  arrasto.alvo = alvo && alvo !== arrasto.item ? alvo : null;
-  arrasto.alvo?.classList.add("alvo");
+  arrasto.alvo = alvo;
+  alvo?.classList.add("alvo");
 });
 const soltar = () => {
   if (!arrasto) return;
@@ -515,16 +614,14 @@ const soltar = () => {
   item.classList.remove("arrastando");
   if (alvo) executar(() => moverAtleta(estado, id, alvo.dataset.id));
 };
-main.addEventListener("pointerup", soltar);
-main.addEventListener("pointercancel", soltar);
+document.addEventListener("pointerup", soltar);
+document.addEventListener("pointercancel", soltar);
 
 // ---- Render -----------------------------------------------------------
 
 function render() {
-  ({ presenca: renderPresenca, times: renderTimes, master: renderMaster })[ui.tela]();
-  const situacao = situacaoPresenca();
-  $("#aba-presenca").dataset.contagem = `${situacao.presentes.length}`;
+  ({ master: renderMaster, lista: renderLista, times: renderTimes, presenca: renderPresenca })[ui.tela]();
+  renderFolha();
 }
 
-if (!["presenca", "times", "master"].includes(ui.tela)) ui.tela = "presenca";
 irPara(ui.tela);

@@ -1,20 +1,23 @@
 // Mensagens de WhatsApp: Lista Master (exportar/importar), lista do grupo e times.
 
-import { NIVEIS } from "./sorteio.js";
+import { NIVEIS, POTES_ORDEM } from "./sorteio.js";
 
 const TITULO_MASTER = "*Lista Master - Vôlei Djalmer*";
 const SEM_POTE = "Sem pote";
 const CASAIS = "Casais";
 
 /*
- * Formato da Lista Master. O número é o ranking geral (posição na lista),
- * por isso os números pulam dentro de cada pote:
+ * Formato da Lista Master. Atletas agrupados por pote (C1, M1, M2, LM1, F1,
+ * F2, LF1); o número é a posição na lista e a ordem dentro do pote é o ranking:
  *
  *   *Lista Master - Vôlei Djalmer*
  *
  *   *C1*
  *   1. João (M) +M1 [Joãozinho, JP]
- *   4. Ana (F)
+ *   2. Ana (F)
+ *
+ *   *M1*
+ *   3. Pedro (M)
  *
  *   *Casais*
  *   João & Ana
@@ -29,7 +32,7 @@ export function gerarMensagemMaster(atletas, casais = []) {
     if (atleta.aliases.length) partes.push(`[${atleta.aliases.join(", ")}]`);
     return partes.join(" ");
   };
-  const secoes = [...NIVEIS, ""].map((pote) => {
+  const secoes = [...POTES_ORDEM, ""].map((pote) => {
     const linhas = atletas.map((atleta, indice) => (atleta.pote === pote ? linha(atleta, indice) : null)).filter(Boolean);
     return linhas.length ? [`*${pote || SEM_POTE}*`, ...linhas].join("\n") : null;
   }).filter(Boolean);
@@ -96,8 +99,9 @@ export function lerMensagemMaster(texto) {
 }
 
 /**
- * Lê a lista de confirmados do grupo: linhas numeradas a partir do "1.",
- * até "Espera Grupo" ou "Convidados". Considera os primeiros 24 nomes.
+ * Lê a lista de confirmados do grupo: linhas numeradas a partir do primeiro
+ * "1." (a numeração pode recomeçar no meio), até "Do grupo", "Espera" ou
+ * "Convidados". Ignora ✅, linhas vazias e "(convidado)". Considera os primeiros 24.
  */
 export function extrairListaGrupo(texto, limite = 24) {
   const nomes = [];
@@ -105,7 +109,7 @@ export function extrairListaGrupo(texto, limite = 24) {
   for (const bruta of String(texto || "").split(/\r?\n/)) {
     const linha = bruta.trim();
     if (/^1\./.test(linha)) naLista = true;
-    if (/^\*?(Espera Grupo|Convidados)/i.test(linha)) break;
+    if (/^\*?(Do grupo|Espera|Convidados)/i.test(linha)) break;
     if (!naLista) continue;
     const encontrado = linha.match(/^\d+\.\s*(.+)$/);
     if (!encontrado) continue;
@@ -113,6 +117,33 @@ export function extrairListaGrupo(texto, limite = 24) {
     if (nome && !nome.startsWith("(")) nomes.push(nome);
   }
   return nomes.slice(0, limite);
+}
+
+/**
+ * Lê a mensagem gerada por "Enviar no WhatsApp" na aba Times:
+ * cabeçalhos "*Time ...*" seguidos de jogadores numerados.
+ */
+export function lerMensagemTimes(texto) {
+  const times = [];
+  let atual = null;
+  for (const bruta of String(texto || "").split(/\r?\n/)) {
+    const linha = bruta.trim();
+    const numerada = linha.match(/^\d+\.\s*(.+)$/);
+    if (numerada) {
+      const nome = numerada[1].replace(/\s*[✅☑✔][︎️]?\s*$/u, "").trim();
+      if (nome && atual) atual.jogadores.push(nome);
+      continue;
+    }
+    const cabecalho = limparCabecalho(linha);
+    // \b impede que o título geral "Times - ..." vire um time.
+    if (/^time\b/i.test(cabecalho)) {
+      atual = { nome: cabecalho, jogadores: [] };
+      times.push(atual);
+    }
+  }
+  const completos = times.filter((time) => time.jogadores.length);
+  if (completos.length < 2) throw new Error("Nenhum time encontrado. Cole a mensagem gerada por \"Enviar no WhatsApp\" na aba Times.");
+  return completos;
 }
 
 export function gerarMensagemTimes(times) {

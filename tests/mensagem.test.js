@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { gerarMensagemMaster, lerMensagemMaster, extrairListaGrupo, gerarMensagemTimes } from "../js/mensagem.js";
+import { gerarMensagemMaster, lerMensagemMaster, extrairListaGrupo, gerarMensagemTimes, lerMensagemTimes } from "../js/mensagem.js";
 
 const atletas = [
   { nome: "João Silva", sexo: "M", pote: "C1", potesAdicionais: ["M1"], aliases: ["Joãozinho", "JP"] },
@@ -63,4 +63,64 @@ test("considera só os primeiros 24 da lista do grupo", () => {
 test("gera a mensagem dos times", () => {
   const mensagem = gerarMensagemTimes([{ nome: "Time Ana", jogadores: [{ nome: "Ana" }, { nome: "Beto" }] }]);
   assert.equal(mensagem, "*Times - Vôlei Djalmer*\n\n*Time Ana*\n1. Ana\n2. Beto");
+});
+
+test("lê a lista no formato do grupo", () => {
+  const texto = `*Vôlei Djalma 05/11*
+19:00-22:00
+$4 pix: chave
+
+1. Roger Silva ✅
+2. Ton✅
+3. Lucas Araújo ✅
+4. Jandeson Moreira✅
+5. Antonio Victor ✅
+6. Junior Moura✅
+7. Livia Cristhina ✅
+8. Núbia Branicio ✅ 
+9. Nelson França✅️
+10. Mitchell Rodrigues ✅
+11. Thaylane Enes ✅
+12. Maria Clara Batista✅
+13. Douglas Nascimento✅
+14. Marcelo Garcia✅
+15. Maximus Novais✅
+16. Pattricia ✅
+17. Leonardo Mendes ✅
+18. Beatriz Bianca ✅
+19. Thiago Ramalho ✅
+20. Luiz Junior✅
+21.  Ricardo ✅
+1. Alexsandro Silva✅
+2. Leo Heric ✅
+3. Lindenberg Paulino ✅
+
+Do grupo:
+1. André 
+2. Milena
+
+Convidados 
+1. (Livia)
+2. 
+1. (Roger)`;
+  const nomes = extrairListaGrupo(texto);
+  assert.equal(nomes.length, 24);
+  assert.equal(nomes[0], "Roger Silva");
+  assert.equal(nomes[1], "Ton");
+  assert.equal(nomes[8], "Nelson França");
+  assert.equal(nomes[20], "Ricardo");
+  assert.equal(nomes[23], "Lindenberg Paulino");
+  assert.ok(!nomes.includes("André"));
+});
+
+test("lê de volta a mensagem de times gerada pelo app", () => {
+  const times = [
+    { nome: "Time Ana", jogadores: [{ nome: "Ana" }, { nome: "Beto" }] },
+    { nome: "Time Caio", jogadores: [{ nome: "Caio" }, { nome: "Duda" }] },
+  ];
+  assert.deepEqual(lerMensagemTimes(gerarMensagemTimes(times)), [
+    { nome: "Time Ana", jogadores: ["Ana", "Beto"] },
+    { nome: "Time Caio", jogadores: ["Caio", "Duda"] },
+  ]);
+  assert.throws(() => lerMensagemTimes("*Times - Vôlei Djalmer*\n1. Ana"), /Nenhum time/);
 });
