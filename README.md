@@ -22,6 +22,29 @@ para outro aparelho ou guardar um backup, use a mensagem de WhatsApp.
   desfaz o último sorteio e aceita colar de volta a mensagem de times.
 - **Presença**: chegada na quadra. Quando os 6 de um time chegam, o time recebe
   1º, 2º, 3º ou 4º em quadra, na ordem em que ficou completo.
+- **Amistoso**: independente das outras telas (dados próprios em
+  `djalmer.amistoso.v1`). Veja abaixo.
+
+## Amistoso
+
+1. Formulário: número de times (2 a 4), atletas por time (6 a 10) e pontos da
+   partida (12, 15, 21 ou 25). Cole a mensagem de times do WhatsApp; times e
+   atletas se ajustam a ela.
+2. Presença: o time confirma quando 6 atletas estão marcados e recebe 1º, 2º…
+   na ordem de confirmação. Com 2 confirmados começa a Partida 1.
+3. Escalação: toque nas posições da quadra desenhada (vista da linha de fundo,
+   time de cima espelhado) e escolha quem começa sacando. A escalação seguinte
+   de cada time vem pré-preenchida.
+4. Partida: "+ Ponto" de cada time. Ponto de quem recebe dá o saque e roda o
+   time (quem estava na posição 2 vai para a 1 e saca). Toque num atleta para
+   substituir por um reserva presente. "Desfazer último ponto" volta placar,
+   saque e rotação.
+5. Fim: vence quem chega aos pontos. Em empate a 1 ponto do fim (14 × 14 num
+   jogo de 15), vence quem fizer 3 pontos primeiro (primeiro a 17).
+6. Fila: o perdedor vai para o fim da fila e o sistema sugere o próximo
+   adversário (dá para trocar). Quem vence 2 seguidas descansa 1 partida e volta
+   contra o vencedor dela; com só 2 times confirmados essa regra fica desligada.
+   Time que confirma depois entra no fim da fila.
 
 ## Regras do sorteio
 
