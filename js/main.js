@@ -1,4 +1,4 @@
-// Interface: Lista Master, Lista (confirmados), Times e Presença (chegada na quadra).
+// Interface: Lista Master, Lista (confirmados), Times, Presença (chegada na quadra) e Amistoso.
 
 import {
   carregar, salvar, adicionarAtleta, atualizarAtleta, adicionarAlias, removerAtleta, moverAtleta,
@@ -8,15 +8,23 @@ import {
 } from "./dados.js";
 import { NIVEIS, POTES_ORDEM, TOTAL_ATLETAS, sortearTimes, problemasParaSortear, nomePoteSorteio } from "./sorteio.js";
 import { gerarMensagemMaster, lerMensagemMaster, extrairListaGrupo, gerarMensagemTimes, lerMensagemTimes } from "./mensagem.js";
+import {
+  OPCOES, EM_QUADRA, carregarAmistoso, salvarAmistoso, configurarAmistoso, aplicarTimesAmistoso, comecarAmistosos,
+  alternarPresencaAmistoso, confirmado, comecarConfrontos, escalar, opcoesAdversario, trocarAdversario, iniciarPartida,
+  situacao, sacador, marcarPonto, desfazerPonto, substituir, encerrarPartida, encerrarAmistosos,
+} from "./amistoso.js";
 
 const CHAVE_TELA = "djalmer.tela";
-const TELAS = ["master", "lista", "times", "presenca"];
+const TELAS = ["master", "lista", "times", "presenca", "amistoso"];
 const estado = carregar(localStorage);
+const amistoso = carregarAmistoso(localStorage);
 const ui = {
   tela: TELAS.includes(localStorage.getItem(CHAVE_TELA)) ? localStorage.getItem(CHAVE_TELA) : "lista",
   buscaMaster: "",
   buscaLista: "",
-  folha: null, // folha aberta com edição ao vivo: { tipo: "atleta", id } ou { tipo: "casais" }
+  folha: null, // folha aberta com edição ao vivo: { tipo: "atleta", id }, { tipo: "casais" } ou { tipo: "amistoso-presenca" }
+  saqueAmistoso: null, // lado escolhido para começar sacando na próxima partida
+  rodou: null, // lado que acabou de rodar, para animar a quadra
 };
 
 const $ = (seletor, raiz = document) => raiz.querySelector(seletor);
@@ -31,6 +39,8 @@ const ICONES = {
   colar: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5.5" y="4.5" width="13" height="16" rx="2"/><path d="M9 4.5h6v2.5H9zM9 11h6M9 15h4"/></svg>',
   seta: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 6l6 6-6 6"/></svg>',
   check: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12.5l4 4 8-9"/></svg>',
+  bola: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5c.8 3.6-.2 6.6-3.2 8.9M20.4 13.4c-3.4-1.4-6.6-1-9.4 1.3M6.3 18.3c.6-3.6 2.6-6.1 5.7-7.4"/></svg>',
+  presenca: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M8 12.2l2.7 2.7L16.2 9.4"/></svg>',
 };
 
 // ---- Infraestrutura ---------------------------------------------------
@@ -39,6 +49,7 @@ function executar(acao, { renderizar = true } = {}) {
   try {
     const resultado = acao();
     salvar(localStorage, estado);
+    salvarAmistoso(localStorage, amistoso);
     if (renderizar) render();
     return resultado ?? true;
   } catch (erro) {
@@ -412,6 +423,7 @@ function renderFolha() {
   const conteudo = $("#folha-conteudo");
   const focado = document.activeElement?.id;
   if (ui.folha.tipo === "casais") conteudo.innerHTML = conteudoCasais();
+  if (ui.folha.tipo === "amistoso-presenca") conteudo.innerHTML = conteudoPresencaAmistoso();
   if (ui.folha.tipo === "atleta") {
     const atleta = estado.atletas.find((a) => a.id === ui.folha.id);
     if (atleta) conteudo.innerHTML = conteudoAtleta(atleta);
@@ -462,6 +474,300 @@ async function importarMaster() {
   if (!substituir) return;
   if (executar(() => aplicarImportacao(estado, lido))) avisar(`Lista importada: ${plural(previa.total, "atleta", "atletas")}.`);
 }
+
+// ---- Amistoso -----------------------------------------------------------
+
+const nomeTime = (time) => amistoso.times[time]?.nome ?? "";
+
+/** "Maria Clara Batista" vira "Maria B." para caber na quadra. */
+const nomeCurto = (nome) => {
+  const partes = nome.trim().split(/\s+/);
+  return partes.length > 1 ? `${partes[0]} ${partes[partes.length - 1][0]}.` : partes[0];
+};
+
+const segmentado = (campo, rotulo) => `<li class="celula celula-segmento">
+    <span class="celula-texto">${rotulo}</span>
+    <span class="segmentado" role="radiogroup" aria-label="${rotulo}">${OPCOES[campo].map((valor) => `
+      <button role="radio" aria-checked="${amistoso.config[campo] === valor}" data-acao="amistoso-config" data-campo="${campo}" data-valor="${valor}">${valor}</button>`).join("")}
+    </span>
+  </li>`;
+
+const celulaEscolha = (acao, texto, marcado, extra = "") =>
+  `<li><button class="celula celula-escolha" data-acao="${acao}" ${extra} aria-pressed="${marcado}">
+    <span class="celula-texto">${texto}</span><span class="marca">${marcado ? ICONES.check : ""}</span>
+  </button></li>`;
+
+function conteudoPresencaAmistoso() {
+  return amistoso.times.map((time, indice) => {
+    const posicao = amistoso.ordem.indexOf(indice);
+    const presentes = amistoso.presentes[indice];
+    const faltam = EM_QUADRA - presentes.length;
+    return `<section class="grupo time-presenca${posicao >= 0 ? " completo" : ""}">
+      <h2 class="grupo-cabecalho cabecalho-time">
+        ${posicao >= 0 ? `<span class="ordem-quadra" aria-label="${posicao + 1}º confirmado">${posicao + 1}º</span>` : ""}
+        <span class="nome-time">${esc(time.nome)}</span>
+        <span class="estado-time">${confirmado(amistoso, indice) ? `${presentes.length} de ${time.jogadores.length}` : `${faltam === 1 ? "falta 1" : `faltam ${faltam}`} para confirmar`}</span>
+      </h2>
+      <ul class="celulas">${time.jogadores.map((nome) => {
+        const marcado = presentes.includes(nome);
+        return `<li><button class="celula celula-checkin" data-acao="amistoso-presenca" data-time="${indice}" data-nome="${esc(nome)}" aria-pressed="${marcado}">
+          <span class="circulo">${marcado ? ICONES.check : ""}</span>
+          <span class="celula-texto">${esc(nome)}</span>
+        </button></li>`;
+      }).join("")}</ul>
+    </section>`;
+  }).join("");
+}
+
+/*
+ * Quadra vista da linha de fundo de baixo. Índices 0..5 = posições 1..6.
+ * Time de cima (espelhado): fundo 1 6 5, rede 2 3 4. Time de baixo: rede 4 3 2, fundo 5 6 1.
+ */
+const FILEIRAS = {
+  superior: [["fundo", [0, 5, 4]], ["ataque", [1, 2, 3]]],
+  inferior: [["ataque", [3, 2, 1]], ["fundo", [4, 5, 0]]],
+};
+
+function meiaQuadra(lado, quadra, { acao, sacando }) {
+  const metade = lado === 0 ? "superior" : "inferior";
+  return `<div class="meia-quadra ${metade}${ui.rodou === lado ? " rodou" : ""}">${FILEIRAS[metade].map(([fileira, posicoes]) => `
+    <div class="fileira ${fileira}">${posicoes.map((p) => {
+      const nome = quadra[p];
+      const saca = sacando && p === 0;
+      return `<button class="posicao${nome ? "" : " vazia"}${saca ? " sacando" : ""}" data-acao="${acao}" data-lado="${lado}" data-posicao="${p}"
+          aria-label="Posição ${p + 1}: ${nome ? esc(nome) : "vazia"}${saca ? ", sacando" : ""}">
+        <span class="numero-posicao">${p + 1}</span>
+        <span class="nome-posicao">${nome ? esc(nomeCurto(nome)) : "Escolher"}</span>
+        ${saca ? `<span class="bola">${ICONES.bola}</span>` : ""}
+      </button>`;
+    }).join("")}</div>`).join("")}
+  </div>`;
+}
+
+function quadraDesenhada(times, quadras, { acao, saque = null, pontas }) {
+  return `<div class="partida">
+    ${pontas(0)}
+    <div class="zona-livre"><div class="campo">
+      ${meiaQuadra(0, quadras[0], { acao, sacando: saque === 0 })}
+      <div class="rede" role="presentation"></div>
+      ${meiaQuadra(1, quadras[1], { acao, sacando: saque === 1 })}
+    </div></div>
+    ${pontas(1)}
+  </div>`;
+}
+
+function historicoAmistoso() {
+  if (!amistoso.partidas.length) return "";
+  return grupo({
+    cabecalho: "Partidas",
+    celulas: [...amistoso.partidas].reverse().map((partida) => {
+      const lado = (i) => `<span class="${partida.times[i] === partida.vencedor ? "venceu" : ""}">${esc(nomeTime(partida.times[i]))} ${partida.placar[i]}</span>`;
+      return `<li class="celula"><span class="rank">${partida.numero}</span><span class="celula-texto">${lado(0)} × ${lado(1)}</span></li>`;
+    }).join(""),
+  });
+}
+
+const rodapeAmistoso = () => `${historicoAmistoso()}
+  ${grupo({ celulas: celulaAcao("amistoso-encerrar", "Encerrar amistosos", { perigo: true }), rodape: "Apaga times, presença e partidas e volta ao formulário." })}`;
+
+const botaoPresenca = () => botaoBarra("amistoso-ver-presenca", "presenca", "Presença");
+
+function renderAmistoso() {
+  const tela = $("#tela-amistoso");
+  const fase = amistoso.fase;
+
+  if (fase === "config") {
+    tela.innerHTML = `
+      ${topo("Amistoso", amistoso.times.length ? plural(amistoso.times.length, "time pronto", "times prontos") : "Monte os times do amistoso")}
+      ${grupo({
+        cabecalho: "Formato",
+        celulas: segmentado("times", "Times") + segmentado("maxAtletas", "Atletas por time") + segmentado("pontos", "Pontos"),
+        rodape: "Ao colar a mensagem, times e atletas se ajustam a ela.",
+      })}
+      ${grupo({
+        celulas: celulaAcao("amistoso-colar", amistoso.times.length ? "Colar outra mensagem" : "Colar times"),
+        rodape: "Use a mensagem gerada por Enviar no WhatsApp na aba Times.",
+      })}
+      ${amistoso.times.map((time) => grupo({
+        cabecalho: `${esc(time.nome)} <span class="contagem">${time.jogadores.length}</span>`,
+        celulas: time.jogadores.map((nome) => `<li class="celula"><span class="celula-texto">${esc(nome)}</span></li>`).join(""),
+      })).join("")}
+      <div class="bloco-botao">
+        <button class="botao-cheio" data-acao="amistoso-comecar" ${amistoso.times.length ? "" : "disabled"}>Começar amistosos</button>
+      </div>`;
+    return;
+  }
+
+  if (fase === "presenca") {
+    const confirmados = amistoso.ordem.length;
+    tela.innerHTML = `
+      ${topo("Amistoso", `${confirmados} de ${amistoso.times.length} times confirmados`)}
+      ${conteudoPresencaAmistoso()}
+      <div class="bloco-botao">
+        <button class="botao-cheio" data-acao="amistoso-confrontos" ${confirmados >= 2 ? "" : "disabled"}>Começar Partida 1</button>
+        <p class="grupo-rodape">Um time confirma com ${EM_QUADRA} presentes. Os 2 primeiros abrem a Partida 1.</p>
+      </div>
+      ${rodapeAmistoso()}`;
+    return;
+  }
+
+  const numero = amistoso.partidas.length + 1;
+
+  if (fase === "escalacao") {
+    const times = amistoso.proxima.times;
+    const quadras = times.map((t) => amistoso.escalacoes[t] || Array(EM_QUADRA).fill(null));
+    const opcoesTimes = opcoesAdversario(amistoso);
+    const pronto = quadras.every((q) => q.every(Boolean)) && ui.saqueAmistoso !== null;
+    tela.innerHTML = `
+      ${topo(`Partida ${numero}`, `${nomeTime(times[0])} × ${nomeTime(times[1])}`, botaoPresenca())}
+      ${amistoso.retorno !== null ? `<p class="aviso-partida">${esc(nomeTime(amistoso.retorno))} venceu 2 seguidas, descansa esta e volta contra o vencedor.</p>` : ""}
+      ${opcoesTimes.length ? grupo({
+        cabecalho: `Quem enfrenta o ${esc(nomeTime(times[0]))}`,
+        celulas: opcoesTimes.map((t, i) => celulaEscolha("amistoso-adversario", `${esc(nomeTime(t))}${i === 0 ? ' <span class="celula-subtexto">próximo da fila</span>' : ""}`, t === times[1], `data-time="${t}"`)).join(""),
+      }) : ""}
+      <p class="grupo-rodape solto">Toque numa posição para escalar. Só aparecem atletas marcados como presentes.</p>
+      ${quadraDesenhada(times, quadras, {
+        acao: "amistoso-slot",
+        pontas: (lado) => `<div class="ponta"><span class="ponta-nome">${esc(nomeTime(times[lado]))}</span><span class="ponta-detalhe">${quadras[lado].filter(Boolean).length} de ${EM_QUADRA}</span></div>`,
+      })}
+      ${grupo({
+        cabecalho: "Quem começa sacando",
+        celulas: times.map((t, lado) => celulaEscolha("amistoso-saque", esc(nomeTime(t)), ui.saqueAmistoso === lado, `data-lado="${lado}"`)).join(""),
+      })}
+      <div class="bloco-botao">
+        <button class="botao-cheio" data-acao="amistoso-iniciar" ${pronto ? "" : "disabled"}>Começar partida</button>
+      </div>
+      ${rodapeAmistoso()}`;
+    return;
+  }
+
+  // Jogo em andamento ou terminado (antes de seguir para a próxima).
+  const atual = amistoso.atual;
+  const { alvo, desempate, vencedor } = situacao(amistoso);
+  const fim = vencedor !== null;
+  const status = fim
+    ? `<div class="resultado"><p><strong>${esc(nomeTime(atual.times[vencedor]))}</strong> venceu ${atual.placar[vencedor]} × ${atual.placar[1 - vencedor]}</p>
+        <button class="botao-cheio" data-acao="amistoso-proxima">Próxima partida</button></div>`
+    : `<p class="saque-linha">Saque: <strong>${esc(sacador(amistoso))}</strong> (${esc(nomeTime(atual.times[atual.saque]))})</p>
+       ${desempate ? `<p class="desempate">Desempate: primeiro a ${alvo}</p>` : ""}`;
+  tela.innerHTML = `
+    ${topo(`Partida ${numero}`, `Jogo de ${amistoso.config.pontos} pontos`, botaoPresenca())}
+    ${status}
+    ${quadraDesenhada(atual.times, atual.quadras, {
+      acao: "amistoso-substituir",
+      saque: fim ? null : atual.saque,
+      pontas: (lado) => {
+        const info = `<div class="ponta${atual.saque === lado && !fim ? " com-saque" : ""}">
+          <span class="ponta-nome">${esc(nomeTime(atual.times[lado]))}${atual.saque === lado && !fim ? ICONES.bola : ""}</span>
+          <span class="ponta-placar">${atual.placar[lado]}</span></div>`;
+        const botao = `<button class="botao-cheio botao-ponto" data-acao="amistoso-ponto" data-lado="${lado}" ${fim ? "disabled" : ""}>+ Ponto ${esc(nomeTime(atual.times[lado]))}</button>`;
+        return lado === 0 ? info + botao : botao + info;
+      },
+    })}
+    ${grupo({
+      celulas: celulaAcao("amistoso-desfazer", "Desfazer último ponto", { desativado: !atual.desfazer.length }),
+      rodape: fim ? "" : "Toque num atleta na quadra para substituir.",
+    })}
+    ${rodapeAmistoso()}`;
+  ui.rodou = null;
+}
+
+async function colarTimesAmistoso() {
+  const colou = await abrirFolha({
+    titulo: "Colar times",
+    conteudo: `<textarea id="texto-colado" rows="14" placeholder="*Times - Vôlei Djalmer*&#10;&#10;*Time Fulano*&#10;1. Nome&#10;..." aria-label="Mensagem de times"></textarea>
+      <p class="folha-texto">De 2 a 4 times, cada um com 6 a 10 atletas.</p>`,
+    ok: "Usar times",
+  });
+  if (!colou) return;
+  let lidos;
+  try { lidos = lerMensagemTimes($("#texto-colado").value); } catch (erro) { avisar(erro.message, true); return; }
+  const resultado = executar(() => aplicarTimesAmistoso(amistoso, lidos));
+  if (resultado) avisar(`${plural(resultado.times, "time carregado", "times carregados")}.${resultado.ajustado ? " Formato ajustado à mensagem." : ""}`);
+}
+
+/** Folha com uma lista de atletas para tocar e escolher. */
+function escolherAtleta({ titulo, nomes, detalhe = () => "", acao, dados, vazio }) {
+  const celulas = nomes.map((nome) => `<li><button class="celula celula-acao" data-acao="${acao}" ${dados} data-nome="${esc(nome)}">
+      <span class="celula-texto">${esc(nome)}</span><span class="celula-detalhe">${detalhe(nome)}</span></button></li>`).join("");
+  return abrirFolha({
+    titulo,
+    conteudo: nomes.length ? grupo({ celulas }) : `<p class="vazio">${esc(vazio)}</p>`,
+    ok: "Fechar",
+    cancelar: null,
+  });
+}
+
+const acoesAmistoso = {
+  "amistoso-config": (b) => executar(() => configurarAmistoso(amistoso, b.dataset.campo, b.dataset.valor)),
+  "amistoso-colar": colarTimesAmistoso,
+  "amistoso-comecar": () => executar(() => comecarAmistosos(amistoso)),
+  "amistoso-presenca": (b) => executar(() => alternarPresencaAmistoso(amistoso, Number(b.dataset.time), b.dataset.nome)),
+  "amistoso-ver-presenca": async () => {
+    await abrirFolha({ titulo: "Presença", conteudo: conteudoPresencaAmistoso(), ok: "OK", cancelar: null, folha: { tipo: "amistoso-presenca" } });
+    render();
+  },
+  "amistoso-confrontos": () => { ui.saqueAmistoso = null; executar(() => comecarConfrontos(amistoso)); },
+  "amistoso-adversario": (b) => executar(() => trocarAdversario(amistoso, Number(b.dataset.time))),
+  "amistoso-slot": (b) => {
+    const lado = Number(b.dataset.lado);
+    const posicao = Number(b.dataset.posicao);
+    const time = amistoso.proxima.times[lado];
+    const quadra = amistoso.escalacoes[time] || [];
+    escolherAtleta({
+      titulo: `${nomeTime(time)}, posição ${posicao + 1}`,
+      nomes: amistoso.presentes[time].filter((nome) => quadra[posicao] !== nome),
+      detalhe: (nome) => (quadra.includes(nome) ? `posição ${quadra.indexOf(nome) + 1}` : ""),
+      acao: "amistoso-escalar",
+      dados: `data-time="${time}" data-posicao="${posicao}"`,
+      vazio: "Nenhum outro atleta presente. Marque a presença pelo botão no topo.",
+    });
+  },
+  "amistoso-escalar": async (b) => {
+    executar(() => escalar(amistoso, Number(b.dataset.time), Number(b.dataset.posicao), b.dataset.nome));
+    await fecharFolha();
+  },
+  "amistoso-saque": (b) => { ui.saqueAmistoso = Number(b.dataset.lado); render(); },
+  "amistoso-iniciar": () => {
+    if (executar(() => iniciarPartida(amistoso, ui.saqueAmistoso))) ui.saqueAmistoso = null;
+  },
+  "amistoso-ponto": (b) => {
+    const lado = Number(b.dataset.lado);
+    ui.rodou = amistoso.atual.saque === lado ? null : lado;
+    executar(() => marcarPonto(amistoso, lado));
+  },
+  "amistoso-desfazer": () => executar(() => desfazerPonto(amistoso)),
+  "amistoso-substituir": (b) => {
+    const lado = Number(b.dataset.lado);
+    const posicao = Number(b.dataset.posicao);
+    const time = amistoso.atual.times[lado];
+    const quadra = amistoso.atual.quadras[lado];
+    escolherAtleta({
+      titulo: `Substituir ${quadra[posicao]}`,
+      nomes: amistoso.presentes[time].filter((nome) => !quadra.includes(nome)),
+      acao: "amistoso-trocar",
+      dados: `data-lado="${lado}" data-posicao="${posicao}"`,
+      vazio: `Nenhum reserva presente no ${nomeTime(time)}.`,
+    });
+  },
+  "amistoso-trocar": async (b) => {
+    const saiu = executar(() => substituir(amistoso, Number(b.dataset.lado), Number(b.dataset.posicao), b.dataset.nome));
+    await fecharFolha();
+    if (saiu) avisar(`${b.dataset.nome} entra, ${saiu} sai.`);
+  },
+  "amistoso-proxima": () => {
+    const resultado = executar(() => encerrarPartida(amistoso));
+    ui.saqueAmistoso = null;
+    if (resultado?.descanso) avisar(`${nomeTime(resultado.vencedor)} venceu 2 seguidas e descansa esta partida.`);
+    window.scrollTo(0, 0);
+  },
+  "amistoso-encerrar": async () => {
+    if (await confirmar("Encerrar amistosos", "Times, presença, partidas e histórico do Amistoso serão apagados.", "Encerrar")) {
+      ui.saqueAmistoso = null;
+      executar(() => encerrarAmistosos(amistoso));
+    }
+  },
+};
 
 // ---- Eventos ----------------------------------------------------------
 
@@ -543,6 +849,7 @@ const acoesClique = {
     if (ocupado) throw new Error(`${ocupado.a} e ${ocupado.b} já formam um casal.`);
     estado.casais.lista.push({ a, b, ativo: true });
   }),
+  ...acoesAmistoso,
 };
 
 async function abrirEditor(id, aviso) {
@@ -622,7 +929,7 @@ document.addEventListener("pointercancel", soltar);
 // ---- Render -----------------------------------------------------------
 
 function render() {
-  ({ master: renderMaster, lista: renderLista, times: renderTimes, presenca: renderPresenca })[ui.tela]();
+  ({ master: renderMaster, lista: renderLista, times: renderTimes, presenca: renderPresenca, amistoso: renderAmistoso })[ui.tela]();
   renderFolha();
 }
 
